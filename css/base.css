@@ -217,6 +217,7 @@ html, body {
 
 /* mascota */
 .egg-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,11 +225,16 @@ html, body {
 }
 .egg-wrap img,
 .pet-sprite-wrap img.pet-img {
+  position: relative;
+  /* por encima de la sombra, que va posicionada dentro del mismo contenedor */
+  z-index: 1;
   width: 168px;
   height: 168px;
   object-fit: contain;
   image-rendering: pixelated;
-  /* por si el sprite (sobre todo los gif) trae una matte blanca en vez de alfa real */
+  /* por si el sprite (sobre todo los gif) trae una matte blanca en vez de alfa real.
+     De paso hace que la sombra se vea a través de esa matte, en vez de quedar
+     tapada por un cuadrado blanco. */
   mix-blend-mode: multiply;
 }
 
@@ -249,12 +255,77 @@ html, body {
 }
 .pet-sprite-wrap.tappable { cursor: pointer; }
 
+/* Sombra bajo el sprite: una elipse dibujada a la resolución del sprite y
+   escalada en modo pixelado, para que sus píxeles midan lo mismo que los del
+   Pokémon. sprite-shadow.js rellena estas variables con la posición real de
+   los pies, que cambia en cada generación y en cada Pokémon. */
+.pet-shadow {
+  position: absolute;
+  left: var(--shadow-x, 50%);
+  top: var(--shadow-y, 88%);
+  width: var(--shadow-w, 0);
+  height: var(--shadow-h, 0);
+  transform: translate(-50%, -50%);
+  background-image: var(--shadow-img, none);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  opacity: var(--shadow-opacity, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* De noche la luz es plana: la sombra se marca menos. */
+.pet-sprite-wrap.asleep { --shadow-opacity: .5; }
+
+/* El giro al andar va en una variable para que las animaciones puedan
+   componerlo con su propio transform sin perder hacia dónde mira. Todo escala
+   desde los pies, que es donde está la sombra. */
+.pet-sprite-wrap img.pet-img {
+  transform: scaleX(var(--flip, 1));
+  transform-origin: 50% 100%;
+}
+
 @keyframes tapbounce {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
+  0% { transform: scaleX(var(--flip, 1)) scale(1); }
+  50% { transform: scaleX(var(--flip, 1)) scale(1.15); }
+  100% { transform: scaleX(var(--flip, 1)) scale(1); }
 }
 .pet-sprite-wrap img.tap-bounce { animation: tapbounce .3s steps(3); }
+
+/* Cuando el Pokémon se despega del suelo (salto o toque) la sombra se encoge
+   un píxel. En vez de escalarla se cambia por una elipse dibujada más pequeña,
+   así sus píxeles siguen midiendo lo mismo que los del sprite. */
+@keyframes shadow-shrink {
+  0%   { width: var(--shadow-w); height: var(--shadow-h); background-image: var(--shadow-img); }
+  25%  { width: var(--shadow-w-s); height: var(--shadow-h-s); background-image: var(--shadow-img-s); }
+  50%  { width: var(--shadow-w-s); height: var(--shadow-h-s); background-image: var(--shadow-img-s); }
+  75%  { width: var(--shadow-w); height: var(--shadow-h); background-image: var(--shadow-img); }
+  100% { width: var(--shadow-w); height: var(--shadow-h); background-image: var(--shadow-img); }
+}
+.pet-shadow.tap-bounce { animation: shadow-shrink .3s steps(1); }
+
+/* Saltito de cada paso: cuatro posiciones fijas, sin interpolar, para que se
+   vea a frames como el resto del sprite. */
+@keyframes hop {
+  0%   { transform: scaleX(var(--flip, 1)) translateY(0); }
+  25%  { transform: scaleX(var(--flip, 1)) translateY(-4px); }
+  50%  { transform: scaleX(var(--flip, 1)) translateY(-7px); }
+  75%  { transform: scaleX(var(--flip, 1)) translateY(-3px); }
+  100% { transform: scaleX(var(--flip, 1)) translateY(0); }
+}
+.pet-sprite-wrap img.hop { animation: hop .4s steps(1); }
+
+/* Mientras está en el aire la sombra se queda en el suelo y solo se encoge. */
+.pet-shadow.hop { animation: shadow-shrink .4s steps(1); }
+
+/* Mordiscos: se agacha a por la baya y vuelve, tres veces. */
+@keyframes chomp {
+  0%   { transform: scaleX(var(--flip, 1)) translateY(0); }
+  50%  { transform: scaleX(var(--flip, 1)) translateY(5px) scaleY(.93); }
+  100% { transform: scaleX(var(--flip, 1)) translateY(0); }
+}
+.pet-sprite-wrap img.eating { animation: chomp .34s steps(1) 3; }
 
 @keyframes pixelz {
   0%   { transform: translate(0, 0); opacity: 1; }
@@ -283,10 +354,42 @@ html, body {
   text-align: center;
   margin-top: 2px;
 }
+/* Baya que se arrastra para dar de comer */
+.berry-item {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  z-index: 3;
+  touch-action: none;
+  filter: drop-shadow(0 3px 3px rgba(20, 20, 40, .3));
+}
+.berry-item.grabbable { cursor: grab; }
+.berry-item.grabbed {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+/* mientras espera a que la arrastren, da un botecito para que se vea */
+@keyframes berry-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.berry-item.waiting { animation: berry-idle 1s steps(2) infinite; }
+
+/* se la come a mordiscos: tres tamaños y desaparece */
+@keyframes berry-bites {
+  0%   { transform: scale(1); }
+  33%  { transform: scale(.72) rotate(-8deg); }
+  66%  { transform: scale(.42) rotate(6deg); }
+  100% { transform: scale(0); }
+}
+.berry-item.eaten { animation: berry-bites 1s steps(1) forwards; }
+
 .leftover-item {
   position: absolute;
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,.25));

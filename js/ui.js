@@ -1,4 +1,5 @@
-import { resolveSprite, iconFor, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
+import { resolveSprite, iconFor, randomBerry, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
+import { applyShadow, footOffset } from './sprite-shadow.js';
 import { getKnownIds, getEntry } from './pokedex.js';
 import { mountMinigame } from './minigame.js';
 import { isNight } from './care.js';
@@ -17,7 +18,9 @@ let homeKey = null;
 let petStageEl = null;
 let petWrapEl = null;
 let petImgEl = null;
+let petShadowEl = null;
 let zEl = null;
+let feeding = null;
 let leftoverEls = [];
 let currentSprite = null;
 let asleepAnimApplied = false;
@@ -271,7 +274,7 @@ const STEP_MS = 500;
 // quieto, a ratos da una tanda corta de pasos, como un Tamagotchi real.
 function scheduleWalk() {
   stopWalkTimer();
-  if (!petStageEl || !petWrapEl || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || isNight(_state.pet)) return;
 
   const willWalk = Math.random() < 0.55;
   if (willWalk) {
@@ -282,7 +285,7 @@ function scheduleWalk() {
 }
 
 function walkBurst(stepsLeft) {
-  if (!petStageEl || !petWrapEl || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || isNight(_state.pet)) return;
   if (stepsLeft <= 0) {
     walkTimer = setTimeout(scheduleWalk, 1200 + Math.random() * 2200);
     return;
@@ -293,6 +296,21 @@ function walkBurst(stepsLeft) {
 
 let walkDir = 1;
 let walkDirY = 1;
+
+// Cada paso es un saltito: el sprite sube y baja a frames fijos y la sombra se
+// encoge un poco mientras está en el aire (las animaciones están en base.css).
+function hopOnce() {
+  [petImgEl, petShadowEl].forEach((el) => {
+    if (!el) return;
+    el.classList.remove('hop');
+    void el.offsetWidth; // reinicia la animación en cada paso
+    el.classList.add('hop');
+  });
+}
+
+function faceTo(dir) {
+  if (petImgEl) petImgEl.style.setProperty('--flip', dir < 0 ? '1' : '-1');
+}
 
 // Movimiento a saltos discretos de STEP_PX cada STEP_MS: horizontal siempre,
 // vertical solo de vez en cuando (un ligero vaivén arriba/abajo).
@@ -310,7 +328,7 @@ function stepOnce() {
   else if (left >= maxX) walkDir = -1;
   else if (Math.random() < 0.06) walkDir = -walkDir;
 
-  if (petImgEl) petImgEl.style.transform = walkDir < 0 ? 'scaleX(1)' : 'scaleX(-1)';
+  faceTo(walkDir);
 
   const nextLeft = Math.min(maxX, Math.max(0, left + walkDir * STEP_PX));
   petWrapEl.style.left = `${Math.round(nextLeft)}px`;
@@ -322,11 +340,196 @@ function stepOnce() {
     const nextTop = Math.min(maxY, Math.max(0, top + walkDirY * STEP_PX));
     petWrapEl.style.top = `${Math.round(nextTop)}px`;
   }
+
+  hopOnce();
+}
+
+// --- dar de comer ----------------------------------------------------------
+//
+// La comida no se da desde el menú: aparece una baya al azar que hay que
+// arrastrar hasta un punto del escenario. El Pokémon va andando (a saltitos)
+// hasta ella y se la come a mordiscos; solo entonces cuenta como alimentado.
+
+const BERRY_SIZE = 44;
+const REACH_PX = 12;
+const EAT_MS = 1000;
+const MAX_FEED_STEPS = 60; // red de seguridad por si no consigue llegar
+
+function cancelFeeding() {
+  if (!feeding) return;
+  clearTimeout(feeding.timer);
+  if (feeding.berryEl) feeding.berryEl.remove();
+  if (feeding.stageEl) feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
+  if (petImgEl) petImgEl.classList.remove('eating');
+  feeding = null;
+}
+
+function startFeeding() {
+  goHome();
+  render(_state); // si venimos de la mochila, monta la vista del Pokémon
+  cancelFeeding();
+  if (!petStageEl) return;
+
+  const berry = randomBerry();
+  const el = document.createElement('img');
+  el.className = 'berry-item grabbable waiting';
+  el.src = berry.src;
+  el.alt = 'Baya';
+  el.style.left = `${Math.round(petStageEl.clientWidth / 2 - BERRY_SIZE / 2)}px`;
+  el.style.top = `${Math.round(petStageEl.clientHeight - BERRY_SIZE)}px`;
+  el.addEventListener('pointerdown', onBerryGrab);
+  petStageEl.appendChild(el);
+
+  feeding = { berryEl: el, stageEl: petStageEl, phase: 'drag', timer: null, steps: 0 };
+  stopWalkTimer();
+  petStageEl.addEventListener('pointerdown', onStagePlace);
+  showBanner('Arrastra la baya donde quieras: irá a buscarla.', { sticky: true });
+}
+
+// Coordenadas del escenario a partir de un evento de puntero.
+function stagePoint(ev) {
+  const rect = feeding.stageEl.getBoundingClientRect();
+  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+}
+
+// Deja la baya donde se pueda alcanzar: el sprite no puede salirse del
+// escenario, así que su punto de apoyo tampoco llega a las esquinas.
+function placeBerry(x, y) {
+  const wrapW = petWrapEl ? petWrapEl.offsetWidth : PET_SIZE;
+  const wrapH = petWrapEl ? petWrapEl.offsetHeight : PET_SIZE;
+  const foot = footOffset(petWrapEl || feeding.stageEl);
+  const minX = foot.x;
+  const maxX = feeding.stageEl.clientWidth - (wrapW - foot.x);
+  const minY = foot.y;
+  const maxY = feeding.stageEl.clientHeight - (wrapH - foot.y);
+
+  const cx = Math.min(Math.max(x, minX), Math.max(minX, maxX));
+  const cy = Math.min(Math.max(y, minY), Math.max(minY, maxY));
+  feeding.berryEl.style.left = `${Math.round(cx - BERRY_SIZE / 2)}px`;
+  feeding.berryEl.style.top = `${Math.round(cy - BERRY_SIZE * 0.72)}px`;
+}
+
+function onBerryGrab(ev) {
+  if (!feeding || feeding.phase !== 'drag') return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const el = feeding.berryEl;
+  el.classList.remove('waiting');
+  el.classList.add('grabbed');
+  el.setPointerCapture(ev.pointerId);
+  el.addEventListener('pointermove', onBerryMove);
+  el.addEventListener('pointerup', onBerryDrop);
+  el.addEventListener('pointercancel', onBerryDrop);
+}
+
+function onBerryMove(ev) {
+  if (!feeding || feeding.phase !== 'drag') return;
+  const p = stagePoint(ev);
+  placeBerry(p.x, p.y);
+}
+
+function onBerryDrop(ev) {
+  if (!feeding || feeding.phase !== 'drag') return;
+  const el = feeding.berryEl;
+  el.removeEventListener('pointermove', onBerryMove);
+  el.removeEventListener('pointerup', onBerryDrop);
+  el.removeEventListener('pointercancel', onBerryDrop);
+  el.classList.remove('grabbed', 'grabbable');
+  dropBerry();
+}
+
+// Tocar el escenario también vale para soltar ahí la baya (más cómodo que
+// arrastrar en pantallas pequeñas).
+function onStagePlace(ev) {
+  if (!feeding || feeding.phase !== 'drag') return;
+  if (ev.target === feeding.berryEl) return;
+  const p = stagePoint(ev);
+  placeBerry(p.x, p.y);
+  feeding.berryEl.classList.remove('waiting', 'grabbable');
+  dropBerry();
+}
+
+function dropBerry() {
+  feeding.phase = 'walking';
+  feeding.steps = 0;
+  feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
+  showBanner(null);
+  walkToBerry();
+}
+
+function berryGround() {
+  const el = feeding.berryEl;
+  return {
+    x: parseFloat(el.style.left) + BERRY_SIZE / 2,
+    y: parseFloat(el.style.top) + BERRY_SIZE * 0.72,
+  };
+}
+
+function petFoot() {
+  const foot = footOffset(petWrapEl);
+  return {
+    x: parseFloat(petWrapEl.style.left || '0') + foot.x,
+    y: parseFloat(petWrapEl.style.top || '0') + foot.y,
+  };
+}
+
+function walkToBerry() {
+  if (!feeding || feeding.phase !== 'walking' || !petWrapEl || !petStageEl) return;
+
+  const target = berryGround();
+  const foot = petFoot();
+  const dx = target.x - foot.x;
+  const dy = target.y - foot.y;
+
+  if ((Math.abs(dx) <= REACH_PX && Math.abs(dy) <= REACH_PX) || feeding.steps >= MAX_FEED_STEPS) {
+    startEating();
+    return;
+  }
+  feeding.steps += 1;
+
+  if (Math.abs(dx) > 2) faceTo(dx < 0 ? -1 : 1);
+
+  const maxX = Math.max(0, petStageEl.clientWidth - petWrapEl.offsetWidth);
+  const maxY = Math.max(0, petStageEl.clientHeight - petWrapEl.offsetHeight);
+  const stepX = Math.max(-STEP_PX, Math.min(STEP_PX, dx));
+  const stepY = Math.max(-STEP_PX, Math.min(STEP_PX, dy));
+  const left = parseFloat(petWrapEl.style.left || '0') + stepX;
+  const top = parseFloat(petWrapEl.style.top || '0') + stepY;
+  petWrapEl.style.left = `${Math.round(Math.min(maxX, Math.max(0, left)))}px`;
+  petWrapEl.style.top = `${Math.round(Math.min(maxY, Math.max(0, top)))}px`;
+
+  hopOnce();
+  feeding.timer = setTimeout(walkToBerry, STEP_MS);
+}
+
+function startEating() {
+  feeding.phase = 'eating';
+  feeding.berryEl.classList.add('eaten');
+  if (petImgEl) {
+    petImgEl.classList.remove('eating');
+    void petImgEl.offsetWidth;
+    petImgEl.classList.add('eating');
+  }
+  feeding.timer = setTimeout(finishEating, EAT_MS);
+}
+
+function finishEating() {
+  const el = feeding.berryEl;
+  feeding = null;
+  if (el) el.remove();
+  if (petImgEl) petImgEl.classList.remove('eating');
+
+  const { woke } = _deps.care.feed(_state);
+  showBanner(woke ? '¡Ñam! Le has despertado, pero se la ha comido.' : '¡Ñam! Se ha comido la baya.');
+  render(_state);
+  _deps.saveState(_state);
+  scheduleWalk();
 }
 
 function leaveHome() {
   if (homeKey === null) return;
   homeKey = null;
+  cancelFeeding();
   stopWalkTimer();
   stopFlipTimer();
 }
@@ -345,10 +548,12 @@ function renderHome(state) {
 }
 
 function buildHomeDOM(state) {
+  cancelFeeding();
   viewRoot.innerHTML = '';
   petStageEl = null;
   petWrapEl = null;
   petImgEl = null;
+  petShadowEl = null;
   zEl = null;
   leftoverEls = [];
 
@@ -357,15 +562,22 @@ function buildHomeDOM(state) {
   if (pet.phase === 'egg') {
     const wrap = document.createElement('div');
     wrap.className = 'egg-wrap';
+    const shadow = document.createElement('div');
+    shadow.className = 'pet-shadow';
+    wrap.appendChild(shadow);
     const img = document.createElement('img');
     img.src = EGG_SPRITE;
-    img.onerror = () => { img.src = EGG_ICON; };
+    img.onerror = () => {
+      img.src = EGG_ICON;
+      applyShadow(wrap, img, EGG_ICON);
+    };
     wrap.appendChild(img);
     const label = document.createElement('p');
     label.className = 'pet-substatus';
     label.textContent = 'Un huevo misterioso... ¡está a punto de eclosionar!';
     viewRoot.appendChild(wrap);
     viewRoot.appendChild(label);
+    applyShadow(wrap, img, EGG_SPRITE);
     return;
   }
 
@@ -378,10 +590,20 @@ function buildHomeDOM(state) {
   const wrap = document.createElement('div');
   wrap.className = 'pet-sprite-wrap tappable';
 
+  // La sombra va antes que el sprite en el DOM para que quede por debajo.
+  const shadow = document.createElement('div');
+  shadow.className = 'pet-shadow';
+  wrap.appendChild(shadow);
+
   const img = document.createElement('img');
   img.className = 'pet-img';
   img.src = sprite.src;
-  img.onerror = () => { if (sprite.fallback) img.src = sprite.fallback; };
+  img.onerror = () => {
+    if (sprite.fallback) {
+      img.src = sprite.fallback;
+      applyShadow(wrap, img, sprite.fallback);
+    }
+  };
   wrap.appendChild(img);
 
   const z = document.createElement('div');
@@ -395,8 +617,10 @@ function buildHomeDOM(state) {
     lastPetTapAt = now;
     _state.pet.happiness = Math.min(100, _state.pet.happiness + 4);
     img.classList.remove('tap-bounce');
+    shadow.classList.remove('tap-bounce');
     void img.offsetWidth; // reinicia la animación aunque se repita rápido
     img.classList.add('tap-bounce');
+    shadow.classList.add('tap-bounce');
     renderStatbar(_state);
   });
 
@@ -427,7 +651,10 @@ function buildHomeDOM(state) {
   petStageEl = stage;
   petWrapEl = wrap;
   petImgEl = img;
+  petShadowEl = shadow;
   zEl = z;
+
+  applyShadow(wrap, img, sprite.src);
 
   requestAnimationFrame(() => {
     if (!petStageEl) return;
@@ -440,6 +667,7 @@ function buildHomeDOM(state) {
   asleepAnimApplied = false;
   if (isNight(state.pet)) {
     asleepAnimApplied = true;
+    wrap.classList.add('asleep');
     pauseSpriteAnimation();
   } else {
     startSpriteAnimation();
@@ -459,6 +687,7 @@ function updateHomeDynamic(state) {
   });
 
   if (zEl) zEl.classList.toggle('hidden', !night);
+  if (petWrapEl) petWrapEl.classList.toggle('asleep', night);
 
   if (night) {
     stopWalkTimer();
@@ -524,8 +753,11 @@ function onMenuAction(key) {
     startMinigame();
     return;
   }
-  if (key === 'feed') care.feed(_state);
-  else if (key === 'clean') care.clean(_state);
+  if (key === 'feed') {
+    startFeeding();
+    return;
+  }
+  if (key === 'clean') care.clean(_state);
   else if (key === 'medicine') {
     const { wasSick } = care.giveMedicine(_state);
     showBanner(wasSick ? '¡Se ha recuperado!' : 'No hace falta medicina ahora mismo.');

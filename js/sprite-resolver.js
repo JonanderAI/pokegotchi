@@ -51,6 +51,26 @@ export function iconFor(id) {
 export const EGG_ICON = `${BASE}/pokemon-icons/pokemon/icons/egg.png`;
 export const EGG_SPRITE = `${BASE}/generation-4/pokemon/main-sprites/heartgold-soulsilver/egg.png`;
 
+// Bayas disponibles en el pack de items: la comida sale al azar de aquí.
+const BERRIES = [
+  'aguav', 'apicot', 'aspear', 'babiri', 'belue', 'bluk', 'charti', 'cheri',
+  'chesto', 'chilan', 'chople', 'coba', 'colbur', 'cornn', 'custap', 'durin',
+  'enigma', 'figy', 'ganlon', 'grepa', 'haban', 'hondew', 'iapapa', 'jaboca',
+  'kasib', 'kebia', 'kelpsy', 'lansat', 'leppa', 'liechi', 'lum', 'mago',
+  'magost', 'micle', 'nanab', 'nomel', 'occa', 'oran', 'pamtre', 'passho',
+  'payapa', 'pecha', 'persim', 'petaya', 'pinap', 'pomeg', 'qualot', 'rabuta',
+  'rawst', 'razz', 'rindo', 'rowap', 'salac', 'shuca', 'sitrus', 'spelon',
+  'starf', 'tamato', 'tanga', 'wacan', 'watmel', 'wepear', 'wiki', 'yache',
+];
+
+export function randomBerry() {
+  const name = BERRIES[Math.floor(Math.random() * BERRIES.length)];
+  return {
+    name,
+    src: `${BASE}/items/items/berries/${name}-berry.png`,
+  };
+}
+
 export const ITEM_ICONS = {
   feed: `${BASE}/items/items/berries/oran-berry.png`,
   happiness: `${BASE}/items/items/heart-scale.png`,
