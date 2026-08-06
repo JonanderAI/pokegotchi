@@ -1,5 +1,6 @@
 import { resolveSprite, iconFor, randomBerry, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
+import { animateSprite } from './sprite-anim.js';
 import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
@@ -16,13 +17,13 @@ let dexSelected = null;
 let minigameStop = null;
 let lastPetTapAt = 0;
 let bannerTimeout = null;
-let flipTimer = null;
 let walkTimer = null;
 let homeKey = null;
 let petStageEl = null;
 let petWrapEl = null;
 let petImgEl = null;
 let petShadowEl = null;
+let petAnim = null;
 let zEl = null;
 let feeding = null;
 let leftoverEls = [];
@@ -41,10 +42,13 @@ let lastWildTapAt = 0;
 const PET_MIN_V = 0.45;
 const PET_MAX_V = 0.98;
 
-// Los límites laterales no son fijos: dependen de lo grande que se vea el
-// Pokémon a esa profundidad, para que nunca se le corte medio cuerpo.
+// Los límites laterales no son fijos: dependen de lo ancho que se vea el
+// Pokémon a esa profundidad, para que nunca se le corte medio cuerpo. Se usa el
+// ancho medido del sprite y no el de su caja, porque los lienzos de Emerald
+// dejan la mitad vacía.
 function petULimits(v) {
-  return uRangeFor(projection, v, petSize);
+  const measured = parseFloat(petWrapEl && petWrapEl.style.getPropertyValue('--sprite-w'));
+  return uRangeFor(projection, v, Number.isFinite(measured) && measured > 0 ? measured : petSize);
 }
 
 // Con el mundo a ventana completa, el sprite ya no puede medir 168px fijos: se
@@ -56,8 +60,11 @@ let propSize = 40;
 function applyStageMetrics(stage) {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
-  petSize = Math.round(Math.max(150, Math.min(300, Math.min(w * 0.6, h * 0.34))));
-  propSize = Math.round(petSize * 0.24);
+  // Los sprites de Emerald ocupan la mitad de su lienzo (mediana del 52% del
+  // alto), así que la caja tiene que ser bastante mayor que el Pokémon que se
+  // acaba viendo: con esto sale a unos 200px de alto en un móvil.
+  petSize = Math.round(Math.max(220, Math.min(460, Math.min(w * 0.9, h * 0.5))));
+  propSize = Math.round(petSize * 0.13);
   stage.style.setProperty('--pet-size', `${petSize}px`);
   stage.style.setProperty('--prop-size', `${propSize}px`);
 }
@@ -68,28 +75,20 @@ const LEFTOVER_SLOTS = [
   { u: 0.82, v: 0.92 },
 ];
 
-function startSpriteAnimation() {
-  stopFlipTimer();
-  if (!currentSprite || !petImgEl) return;
-  if (currentSprite.kind === 'flip' && currentSprite.src2) {
-    let toggled = false;
-    flipTimer = setInterval(() => {
-      toggled = !toggled;
-      petImgEl.src = toggled ? currentSprite.src2 : currentSprite.src;
-    }, 500);
-  } else if (currentSprite.kind === 'gif') {
-    petImgEl.src = currentSprite.src;
-  }
+function destroyPetAnim() {
+  if (!petAnim) return;
+  petAnim.destroy();
+  petAnim = null;
 }
 
+function startSpriteAnimation() {
+  if (petAnim) petAnim.play();
+}
+
+// De noche se queda en la pose de reposo, quieto de verdad: con los GIF de
+// antes esto era imposible y seguia moviendose mientras dormia.
 function pauseSpriteAnimation() {
-  stopFlipTimer();
-  if (!currentSprite || !petImgEl) return;
-  // Los GIF no se pueden pausar sin cambiar de imagen (y el estático suele tener
-  // otro tamaño de lienzo, lo que hace "saltar" el zoom) así que esos se dejan animados.
-  if (currentSprite.kind === 'flip') {
-    petImgEl.src = currentSprite.src;
-  }
+  if (petAnim) petAnim.rest();
 }
 
 const viewRoot = document.getElementById('view-root');
@@ -339,13 +338,6 @@ function stopWalkTimer() {
   if (walkTimer) {
     clearTimeout(walkTimer);
     walkTimer = null;
-  }
-}
-
-function stopFlipTimer() {
-  if (flipTimer) {
-    clearInterval(flipTimer);
-    flipTimer = null;
   }
 }
 
@@ -651,6 +643,7 @@ function onStageResize() {
   else petStageEl.prepend(nextFloor);
   floorEl = nextFloor;
 
+  if (petAnim) petAnim.reflow();
   placePet();
   leftoverEls.forEach((el, i) => placeProp(el, projection, LEFTOVER_SLOTS[i], propSize));
   if (feeding) placeProp(feeding.berryEl, projection, feeding.pos, propSize);
@@ -663,7 +656,7 @@ function leaveHome() {
   cancelFeeding();
   stopWild();
   stopWalkTimer();
-  stopFlipTimer();
+  destroyPetAnim();
   floorEl = null;
 }
 
@@ -674,7 +667,6 @@ function renderHome(state) {
   if (key !== homeKey) {
     homeKey = key;
     stopWalkTimer();
-    stopFlipTimer();
     buildHomeDOM(state);
   }
   updateHomeDynamic(state);
@@ -739,15 +731,10 @@ function buildHomeDOM(state) {
   shadow.className = 'pet-shadow';
   wrap.appendChild(shadow);
 
-  const img = document.createElement('img');
+  // El sprite es un div con la rejilla de fotogramas de fondo, no un <img>:
+  // así la animación la lleva el juego (ver sprite-anim.js).
+  const img = document.createElement('div');
   img.className = 'pet-img';
-  img.src = sprite.src;
-  img.onerror = () => {
-    if (sprite.fallback) {
-      img.src = sprite.fallback;
-      applyShadow(wrap, img, sprite.fallback);
-    }
-  };
   wrap.appendChild(img);
 
   const z = document.createElement('div');
@@ -800,9 +787,19 @@ function buildHomeDOM(state) {
   petShadowEl = shadow;
   zEl = z;
 
+  destroyPetAnim();
+  petAnim = animateSprite(img, pet.speciesId);
+  if (petAnim) {
+    applyShadow(wrap, img, sprite.src, { w: petAnim.sheet.cellW, h: petAnim.sheet.cellH }).then(placePet);
+  } else {
+    // sin rejilla (no ha cargado el manifiesto): el sprite estático
+    img.style.backgroundImage = `url("${sprite.fallback}")`;
+    img.style.backgroundSize = 'contain';
+    img.style.backgroundRepeat = 'no-repeat';
+    applyShadow(wrap, img, sprite.fallback).then(placePet);
+  }
+
   placePet();
-  // la sombra medida da el punto de apoyo exacto: al llegar hay que recolocar
-  applyShadow(wrap, img, sprite.src).then(placePet);
 
   mountWild(state);
 

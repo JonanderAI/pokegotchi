@@ -238,7 +238,7 @@ html, body {
   min-height: 140px;
 }
 .egg-wrap img,
-.pet-sprite-wrap img.pet-img {
+.pet-sprite-wrap .pet-img {
   position: relative;
   /* por encima de la sombra, que va posicionada dentro del mismo contenedor */
   z-index: 1;
@@ -247,12 +247,15 @@ html, body {
   object-fit: contain;
   image-rendering: pixelated;
 }
+/* El sprite animado es un div con la rejilla de fotogramas de fondo: la celda
+   que se ve la elige sprite-anim.js moviendo background-position. */
+.pet-sprite-wrap .pet-img { background-repeat: no-repeat; }
 /* Sprites que vienen con matte en vez de alfa (los GIF de Gen 2): se les
    recorta el blanco puro para que no tapen la sombra con un cuadrado.
    Antes esto se disimulaba con mix-blend-mode: multiply, pero al multiplicar
    con lo que hay detrás la sombra se transparentaba a través del Pokémon. */
 .egg-wrap img.keyed,
-.pet-sprite-wrap img.keyed { filter: url(#key-matte); }
+.pet-sprite-wrap .keyed { filter: url(#key-matte); }
 
 /* El mundo ocupa la ventana entera y el resto de la interfaz flota encima.
    Va posicionado contra #screen, no contra #view-root, para llegar de verdad a
@@ -374,7 +377,7 @@ html, body {
 /* El giro al andar va en una variable para que las animaciones puedan
    componerlo con su propio transform sin perder hacia dónde mira. Todo escala
    desde los pies, que es donde está la sombra. */
-.pet-sprite-wrap img.pet-img {
+.pet-sprite-wrap .pet-img {
   transform: scaleX(var(--flip, 1));
   transform-origin: 50% 100%;
 }
@@ -384,7 +387,7 @@ html, body {
   50% { transform: scaleX(var(--flip, 1)) scale(1.15); }
   100% { transform: scaleX(var(--flip, 1)) scale(1); }
 }
-.pet-sprite-wrap img.tap-bounce { animation: tapbounce .3s steps(3); }
+.pet-sprite-wrap .tap-bounce { animation: tapbounce .3s steps(3); }
 
 /* Cuando el Pokémon se despega del suelo (salto o toque) la sombra se encoge
    un píxel. En vez de escalarla se cambia por una elipse dibujada más pequeña,
@@ -407,7 +410,7 @@ html, body {
   75%  { transform: scaleX(var(--flip, 1)) translateY(-3px); }
   100% { transform: scaleX(var(--flip, 1)) translateY(0); }
 }
-.pet-sprite-wrap img.hop { animation: hop .4s steps(1); }
+.pet-sprite-wrap .pet-img.hop { animation: hop .4s steps(1); }
 
 /* Mientras está en el aire la sombra se queda en el suelo y solo se encoge. */
 .pet-shadow.hop { animation: shadow-shrink .4s steps(1); }
@@ -418,7 +421,7 @@ html, body {
   50%  { transform: scaleX(var(--flip, 1)) translateY(5px) scaleY(.93); }
   100% { transform: scaleX(var(--flip, 1)) translateY(0); }
 }
-.pet-sprite-wrap img.eating { animation: chomp .34s steps(1) 3; }
+.pet-sprite-wrap .pet-img.eating { animation: chomp .34s steps(1) 3; }
 
 @keyframes pixelz {
   0%   { transform: translate(0, 0); opacity: 1; }
@@ -429,10 +432,12 @@ html, body {
 }
 .sleep-z {
   position: absolute;
-  /* en proporción, no en píxeles: la caja del sprite cambia con la ventana y
-     las Zzz tienen que quedarse junto a la cabeza */
-  top: 6%;
-  right: 18%;
+  /* pegadas a la cabeza de verdad: la caja del sprite es mucho mayor que el
+     Pokémon (los lienzos de Emerald van medio vacíos), así que se cuelgan del
+     borde que ha medido sprite-shadow.js, no de la esquina de la caja */
+  left: var(--sprite-right, 82%);
+  top: var(--sprite-top, 6%);
+  transform: translate(-40%, -70%);
   font-family: var(--font-pixel);
   font-size: 16px;
   font-weight: bold;

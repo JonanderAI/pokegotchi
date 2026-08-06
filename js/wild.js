@@ -4,13 +4,13 @@
 // van.
 
 import { resolveSprite } from './sprite-resolver.js';
+import { animateSprite } from './sprite-anim.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
 import { placeActor, STEP_U, STEP_V } from './world.js';
 import { SPECIES_POOL } from './species-pool.js';
 
 const MAX_WILD = 3;
 const STEP_MS = 620;          // andan un poco más lentos que la mascota
-const FLIP_MS = 500;
 const SPAWN_MIN_MS = 5000;
 const SPAWN_MAX_MS = 13000;
 const LIFE_STEPS = [14, 30];  // pasos que se quedan antes de irse
@@ -65,16 +65,9 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
     shadow.className = 'pet-shadow';
     wrap.appendChild(shadow);
 
-    const img = document.createElement('img');
+    const img = document.createElement('div');
     img.className = 'pet-img';
-    img.src = sprite.src;
     img.style.setProperty('--flip', start.dir > 0 ? '-1' : '1');
-    img.onerror = () => {
-      if (sprite.fallback) {
-        img.src = sprite.fallback;
-        applyShadow(wrap, img, sprite.fallback).then(() => place(actor));
-      }
-    };
     wrap.appendChild(img);
 
     const actor = {
@@ -83,13 +76,12 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       wrap,
       img,
       shadow,
+      anim: null,
       pos: { u: start.u, v: start.v },
       dir: start.dir,
       stepsLeft: Math.round(randomBetween(LIFE_STEPS[0], LIFE_STEPS[1])),
       leaving: false,
       timer: null,
-      flipTimer: null,
-      frame2: false,
     };
 
     wrap.addEventListener('pointerdown', (ev) => {
@@ -102,13 +94,15 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
     actors.push(actor);
 
     place(actor);
-    applyShadow(wrap, img, sprite.src).then(() => place(actor));
-
-    if (sprite.kind === 'flip' && sprite.src2) {
-      actor.flipTimer = setInterval(() => {
-        actor.frame2 = !actor.frame2;
-        img.src = actor.frame2 ? sprite.src2 : sprite.src;
-      }, FLIP_MS);
+    actor.anim = animateSprite(img, speciesId);
+    if (actor.anim) {
+      actor.anim.play();
+      applyShadow(wrap, img, sprite.src, { w: actor.anim.sheet.cellW, h: actor.anim.sheet.cellH })
+        .then(() => place(actor));
+    } else {
+      img.style.backgroundImage = `url("${sprite.fallback}")`;
+      img.style.backgroundSize = 'contain';
+      applyShadow(wrap, img, sprite.fallback).then(() => place(actor));
     }
 
     requestAnimationFrame(() => wrap.classList.add('visible'));
@@ -117,6 +111,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
 
   function place(actor) {
     placeActor(actor.wrap, getProjection(), actor.pos, footOffset(actor.wrap));
+    if (actor.anim) actor.anim.reflow();
   }
 
   function hop(actor) {
@@ -170,7 +165,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
 
   function despawn(actor) {
     clearTimeout(actor.timer);
-    clearInterval(actor.flipTimer);
+    if (actor.anim) actor.anim.destroy();
     actor.wrap.classList.remove('visible');
     const idx = actors.indexOf(actor);
     if (idx >= 0) actors.splice(idx, 1);
@@ -189,7 +184,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       clearTimeout(spawnTimer);
       actors.forEach((actor) => {
         clearTimeout(actor.timer);
-        clearInterval(actor.flipTimer);
+        if (actor.anim) actor.anim.destroy();
         actor.wrap.remove();
       });
       actors.length = 0;

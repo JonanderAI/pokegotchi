@@ -1,4 +1,5 @@
 import { loadState, saveState, clearSave, TICK_MS, SIM_TICK_MS } from './state.js';
+import { loadSpriteSheets } from './sprite-anim.js';
 import * as care from './care.js';
 import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
@@ -126,6 +127,10 @@ function applyTimeAway() {
 
   saveState(state);
 }
+
+// Las rejillas de fotogramas hacen falta antes de pintar nada: sin ellas los
+// sprites se quedarian en el estatico.
+await loadSpriteSheets();
 
 initUI(state, { care, onOakContinue, saveState, resetGame });
 applyTimeAway();

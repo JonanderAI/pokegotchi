@@ -1,6 +1,9 @@
-// Rango completo que puede aparecer en el juego (gen 1 a gen 4, ver species-pool.js).
+import { MAX_SPECIES_ID } from './sprite-resolver.js';
+
+// Rango completo que puede aparecer en el juego: hasta donde llegan los sprites
+// animados de Emerald (ver sprite-resolver.js).
 const MIN_DEX_ID = 1;
-const MAX_DEX_ID = 493;
+const MAX_DEX_ID = MAX_SPECIES_ID;
 
 // Registra una especie como "vista" la primera vez que aparece como mascota activa.
 export function registerSeen(state, id, info) {

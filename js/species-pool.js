@@ -1,11 +1,11 @@
 import { isBaseStage } from './pokeapi.js';
+import { MAX_SPECIES_ID } from './sprite-resolver.js';
 
-// Pokémon de cualquier generación hasta la 4 (1-493): los sprites de Crystal,
-// Emerald y HeartGold/SoulSilver incluyen también a los de Kanto (gen 1), así
-// que pueden mostrarse con esos sprites animados. Gen 5 no tiene animación en
-// el pack, así que se descarta.
+// Todo el juego usa los sprites animados de Emerald, que llegan hasta el 386
+// (Kanto, Johto y Hoenn). Sinnoh se queda fuera: en el pack no hay ni una
+// especie del 387 al 493 con animacion de verdad.
 const MIN_ID = 1;
-const MAX_ID = 493;
+const MAX_ID = MAX_SPECIES_ID;
 
 // Respaldo local (especies sin pre-evolución conocidas de antemano) para cuando
 // no hay red y no se puede preguntar a PokeAPI si una especie es de base.
@@ -13,7 +13,6 @@ export const SPECIES_POOL = [
   1, 4, 7, 10, 16, 19, 23, 27, 37, 43, 54, 74, 129, 133,
   152, 155, 158, 161, 163, 170, 179, 183, 187, 194, 216, 220, 246,
   252, 255, 258, 261, 263, 276, 300, 304, 328, 349, 371, 374,
-  387, 390, 393, 396, 399, 403, 427, 441, 443, 449, 456, 459,
 ];
 
 export function randomSpeciesId() {

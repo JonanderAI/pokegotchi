@@ -29,16 +29,19 @@ const FOOT_BAND = 0.22;
 // una antena) desplace la sombra.
 const MIN_RUN = 2;
 
-function measurePixels(img) {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
+// `cell` limita la medida a la primera celda: los sprites animados vienen en
+// una rejilla y la sombra se saca de su primer frame (la pose de reposo), que
+// es lo que la mantiene quieta mientras el Pokémon se mueve.
+function measurePixels(img, cell) {
+  const w = cell ? cell.w : img.naturalWidth;
+  const h = cell ? cell.h : img.naturalHeight;
   if (!w || !h) return null;
 
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, 0, 0, w, h, 0, 0, w, h);
 
   let data;
   try {
@@ -112,6 +115,7 @@ function measurePixels(img) {
     // vez de alfa): hay que recortarlo antes de pintarlo sobre la sombra.
     matte: matteOpaque,
     // +1 porque son índices de píxel y queremos el borde exterior.
+    boxTop: top,
     boxLeft: left,
     boxRight: right + 1,
     boxBottom: bottom + 1,
@@ -123,14 +127,15 @@ function measurePixels(img) {
 }
 
 // Mide un sprite (cacheado por URL). Devuelve null si no se ha podido medir.
-export function measureSprite(src) {
+// `cell` (opcional) acota la medida al primer frame de una rejilla.
+export function measureSprite(src, cell) {
   if (!src) return Promise.resolve(null);
   if (cache.has(src)) return cache.get(src);
 
   const promise = new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
-    img.onload = () => resolve(measurePixels(img));
+    img.onload = () => resolve(measurePixels(img, cell));
     img.onerror = () => resolve(null);
     img.src = src;
   });
@@ -228,10 +233,23 @@ function writeVars(wrapEl, { nativeW, nativeH, scale, centerX, centerY }) {
   wrapEl.style.setProperty('--shadow-y', `${centerY.toFixed(1)}px`);
 }
 
+// Dónde está de verdad el Pokémon dentro de su caja, que no la llena: los
+// lienzos de Emerald dejan la mitad vacía. Sirve para saber hasta dónde puede
+// acercarse a los bordes sin que se le corte nada, y para colgarle cosas de la
+// cabeza (las Zzz) sin que queden flotando en el vacío.
+function writeSpriteBox(wrapEl, m, metrics, boxW, boxH) {
+  const { scale } = metrics;
+  const offsetX = (boxW - m.naturalWidth * scale) / 2;
+  const offsetY = (boxH - m.naturalHeight * scale) / 2;
+  wrapEl.style.setProperty('--sprite-w', `${((m.boxRight - m.boxLeft) * scale).toFixed(1)}px`);
+  wrapEl.style.setProperty('--sprite-right', `${(offsetX + m.boxRight * scale).toFixed(1)}px`);
+  wrapEl.style.setProperty('--sprite-top', `${(offsetY + m.boxTop * scale).toFixed(1)}px`);
+}
+
 // Escribe posición, tamaño e imagen de la sombra como variables CSS del
 // contenedor, que debe tener un hijo .pet-shadow (ver base.css).
-export function applyShadow(wrapEl, imgEl, src) {
-  return measureSprite(src).then((m) => {
+export function applyShadow(wrapEl, imgEl, src, cell) {
+  return measureSprite(src, cell).then((m) => {
     if (!wrapEl.isConnected) return;
 
     // Los sprites con matte se recortan por filtro (ver #key-matte en el HTML):
@@ -257,6 +275,7 @@ export function applyShadow(wrapEl, imgEl, src) {
     }
 
     const metrics = toBoxMetrics(m, boxW, boxH);
+    writeSpriteBox(wrapEl, m, metrics, boxW, boxH);
     writeVars(wrapEl, {
       ...metrics,
       centerX: imgEl.offsetLeft + metrics.centerX,

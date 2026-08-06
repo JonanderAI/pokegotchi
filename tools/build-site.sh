@@ -41,17 +41,16 @@ copy_dir "$S/items/items/berries"
 copy_files "$S/items/items"
 copy_files "$S/pokemon-icons/pokemon/icons"
 
-# Gen 2: sprite animado + png de respaldo
-copy_files "$S/generation-2/pokemon/main-sprites/crystal"
-copy_dir "$S/generation-2/pokemon/main-sprites/crystal/animated"
-
-# Gen 3: igual
+# Los sprites del juego: las rejillas de fotogramas que genera
+# tools/build-spritesheets.py a partir de los GIF de Emerald, y el PNG suelto
+# de Emerald como respaldo por si alguna rejilla no carga.
+copy_dir "$S/generated/emerald"
 copy_files "$S/generation-3/pokemon/main-sprites/emerald"
-copy_dir "$S/generation-3/pokemon/main-sprites/emerald/animated"
 
-# Gen 4: los dos frames que se alternan por JS
-copy_files "$S/generation-4/pokemon/main-sprites/heartgold-soulsilver"
-copy_dir "$S/generation-4/pokemon/main-sprites/heartgold-soulsilver/frame2"
+# Del pack de Gen 4 solo se usa el huevo.
+mkdir -p "$OUT/$S/generation-4/pokemon/main-sprites/heartgold-soulsilver"
+cp "$S/generation-4/pokemon/main-sprites/heartgold-soulsilver/egg.png" \
+   "$OUT/$S/generation-4/pokemon/main-sprites/heartgold-soulsilver/"
 
 printf 'sitio: %s ficheros, %s\n' \
   "$(find "$OUT" -type f | wc -l)" \

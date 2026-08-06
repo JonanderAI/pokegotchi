@@ -1,47 +1,22 @@
-// Resuelve rutas de sprites dentro de sprites/ según la generación del Pokémon (por número de Pokédex nacional).
-// Prioriza siempre la versión animada cuando existe en la carpeta de esa generación.
+// Resuelve rutas de sprites dentro de sprites/.
+//
+// Todos los Pokémon usan los sprites de Emerald (Gen 3): son los únicos del
+// pack con animación de verdad (mediana de 26 frames por especie, frente a los
+// 2 de HeartGold/SoulSilver), y al venir todos de la misma generación el juego
+// tiene un solo estilo. A cambio, el juego llega hasta el 386: Emerald no tiene
+// sprites de Sinnoh.
 const BASE = 'sprites';
 
-// Solo Gen 2, Gen 3 y Gen 4: son las únicas con sprite animado de verdad
-// (GIF) o al menos 2 frames en el pack. Gen 1 y Gen 5 se descartan.
-const GEN_MAX = [
-  { gen: 2, max: 251 },
-  { gen: 3, max: 386 },
-  { gen: 4, max: 493 },
-];
+export const MAX_SPECIES_ID = 386;
 
-export function genForId(id) {
-  for (const r of GEN_MAX) if (id <= r.max) return r.gen;
-  return 4;
-}
-
-// kind: 'gif' (animado nativo) o 'flip' (2 frames que alternamos por JS)
+// La animación sale de la rejilla generada (ver sprite-anim.js). El PNG suelto
+// de Emerald queda de respaldo por si la rejilla no carga.
 export function resolveSprite(id) {
-  const gen = genForId(id);
-  switch (gen) {
-    case 2:
-      return {
-        gen,
-        kind: 'gif',
-        src: `${BASE}/generation-2/pokemon/main-sprites/crystal/animated/${id}.gif`,
-        fallback: `${BASE}/generation-2/pokemon/main-sprites/crystal/${id}.png`,
-      };
-    case 3:
-      return {
-        gen,
-        kind: 'gif',
-        src: `${BASE}/generation-3/pokemon/main-sprites/emerald/animated/${id}.gif`,
-        fallback: `${BASE}/generation-3/pokemon/main-sprites/emerald/${id}.png`,
-      };
-    case 4:
-    default:
-      return {
-        gen,
-        kind: 'flip',
-        src: `${BASE}/generation-4/pokemon/main-sprites/heartgold-soulsilver/${id}.png`,
-        src2: `${BASE}/generation-4/pokemon/main-sprites/heartgold-soulsilver/frame2/${id}.png`,
-      };
-  }
+  return {
+    kind: 'sheet',
+    src: `${BASE}/generated/emerald/${id}.png`,
+    fallback: `${BASE}/generation-3/pokemon/main-sprites/emerald/${id}.png`,
+  };
 }
 
 export function iconFor(id) {
