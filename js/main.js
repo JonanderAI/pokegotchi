@@ -1,6 +1,6 @@
 import { loadState, saveState, clearSave, TICK_MS } from './state.js';
 import * as care from './care.js';
-import { hatchNewEgg } from './lifecycle.js';
+import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { registerSeen } from './pokedex.js';
 import { initUI, render, showBanner, goHome } from './ui.js';
@@ -13,6 +13,14 @@ async function ensureSpeciesRegistered() {
   registerSeen(state, state.pet.speciesId, info);
   render(state);
   saveState(state);
+}
+
+async function tryRefineEgg() {
+  const changed = await refineEggSpecies(state);
+  if (changed) {
+    render(state);
+    saveState(state);
+  }
 }
 
 function handleEvents(events) {
@@ -52,6 +60,7 @@ function onOakContinue() {
   goHome();
   render(state);
   saveState(state);
+  tryRefineEgg();
 }
 
 function resetGame() {
@@ -68,5 +77,6 @@ function loop() {
 
 initUI(state, { care, onOakContinue, saveState, resetGame });
 ensureSpeciesRegistered();
+tryRefineEgg();
 render(state);
 setInterval(loop, TICK_MS);

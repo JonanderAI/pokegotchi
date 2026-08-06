@@ -131,6 +131,8 @@ export function render(state) {
   } else {
     renderHome(state);
   }
+
+  sanitizeAccents(screenEl);
 }
 
 export function showBanner(message, opts = {}) {
@@ -159,6 +161,7 @@ export function showBanner(message, opts = {}) {
   if (!opts.sticky) {
     bannerTimeout = setTimeout(() => bannerEl.classList.add('hidden'), opts.autoHideMs || 3500);
   }
+  sanitizeAccents(bannerEl);
 }
 
 function stopMinigame() {

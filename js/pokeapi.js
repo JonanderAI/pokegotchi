@@ -1,6 +1,7 @@
 // Metadatos de texto (nombre, tipos, evolución) desde PokeAPI, cacheados en localStorage.
 // Los sprites NUNCA vienen de aquí: siempre se usan los locales de sprites/.
 const CACHE_KEY = 'pokegotchi-pokeapi-cache-v1';
+const BASESTAGE_CACHE_KEY = 'pokegotchi-basestage-cache-v1';
 
 function loadCache() {
   try {
@@ -15,6 +16,39 @@ function saveCache(cache) {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
     /* ignorar si no hay almacenamiento disponible */
+  }
+}
+
+function loadBaseStageCache() {
+  try {
+    return JSON.parse(localStorage.getItem(BASESTAGE_CACHE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBaseStageCache(cache) {
+  try {
+    localStorage.setItem(BASESTAGE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* ignorar si no hay almacenamiento disponible */
+  }
+}
+
+// true/false si se sabe, null si no hay conexión para averiguarlo.
+export async function isBaseStage(id) {
+  const cache = loadBaseStageCache();
+  if (typeof cache[id] === 'boolean') return cache[id];
+  try {
+    const res = await fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`);
+    if (!res.ok) throw new Error('pokeapi fetch failed');
+    const data = await res.json();
+    const result = data.evolves_from_species === null;
+    cache[id] = result;
+    saveBaseStageCache(cache);
+    return result;
+  } catch {
+    return null;
   }
 }
 

@@ -1,6 +1,6 @@
 import { TIMING } from './state.js';
 import { getSpeciesInfo } from './pokeapi.js';
-import { randomSpeciesId } from './species-pool.js';
+import { randomSpeciesId, pickBaseStageSpeciesId } from './species-pool.js';
 
 const STAGE_ORDER = ['baby', 'child', 'teen', 'adult'];
 
@@ -65,4 +65,17 @@ export function hatchNewEgg(state) {
   state.pet.awakenedThisNight = false;
   state.pet.careGoodEvents = 0;
   state.pet.careBadEvents = 0;
+}
+
+// El huevo empieza con una especie de base del respaldo local (síncrono), pero de
+// fondo intentamos afinar con una especie de base real elegida al azar entre el
+// 1 y el 493 vía PokeAPI. Solo se aplica si el huevo sigue sin eclosionar.
+export async function refineEggSpecies(state) {
+  if (state.pet.phase !== 'egg') return false;
+  const id = await pickBaseStageSpeciesId();
+  if (id && state.pet.phase === 'egg') {
+    state.pet.speciesId = id;
+    return true;
+  }
+  return false;
 }

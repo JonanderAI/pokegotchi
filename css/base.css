@@ -1,7 +1,11 @@
-/* Las fuentes pixel de los juegos (sprites/fonts) no traen tildes ni "ñ",
-   así que de momento usamos una tipografía normal que sí las soporte. */
+@font-face {
+  font-family: "PokemonClassic";
+  src: url("../sprites/fonts/Pokemon%20Classic.ttf") format("truetype");
+  font-display: swap;
+}
+
 :root {
-  --font-pixel: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-pixel: "PokemonClassic", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --bg-top: #ffffff;
   --bg-bottom: #eef1f7;
   --ink: #20232b;
@@ -326,6 +330,9 @@ html, body {
 }
 #more-panel.hidden { display: none; }
 .more-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border: none;
   border-radius: 10px;
@@ -335,6 +342,7 @@ html, body {
   text-align: left;
   color: var(--ink);
 }
+.more-btn i { width: 18px; text-align: center; color: var(--accent); }
 .more-btn:active { background: rgba(0,0,0,.06); }
 
 /* pill nav flotante inferior */
@@ -354,16 +362,21 @@ html, body {
   z-index: 7;
 }
 .pill-btn {
-  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 16px;
   border: none;
   border-radius: 999px;
   background: transparent;
   font-family: var(--font-pixel);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ink);
   opacity: .6;
   white-space: nowrap;
 }
+.pill-btn i { font-size: 15px; }
 .pill-btn.active { opacity: 1; background: var(--accent); color: #fff; }
 
 .hidden { display: none !important; }
