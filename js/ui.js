@@ -11,6 +11,7 @@ import { XP_PER_LEVEL } from './state.js';
 let _state = null;
 let _deps = null;
 let uiTab = 'home';
+let openSheet = null; // 'bag' | 'more' | null
 let dexSelected = null;
 let minigameStop = null;
 let lastPetTapAt = 0;
@@ -77,6 +78,8 @@ const viewRoot = document.getElementById('view-root');
 const bannerEl = document.getElementById('banner');
 const pillnavEl = document.getElementById('pillnav');
 const morePanelEl = document.getElementById('more-panel');
+const bagPanelEl = document.getElementById('bag-panel');
+const scrimEl = document.getElementById('sheet-scrim');
 const statbarEl = document.getElementById('statbar');
 const infoCardEl = document.getElementById('info-card');
 const infoIconEl = document.getElementById('info-icon');
@@ -111,36 +114,71 @@ export function initUI(state, deps) {
     renderStatbar(_state);
   });
 
+  buildBagPanel();
+
   pillnavEl.querySelectorAll('.pill-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      stopMinigame();
-      if (btn.dataset.tab === 'more') {
-        morePanelEl.classList.toggle('hidden');
-        if (!morePanelEl.classList.contains('hidden')) showBanner(null);
-        renderPillnav();
+      const tab = btn.dataset.tab;
+
+      // La Mochila y el "Más" son paneles flotantes, no pantallas: se abren
+      // encima de lo que haya sin sacarte de donde estás.
+      if (tab === 'bag' || tab === 'more') {
+        toggleSheet(tab);
         return;
       }
-      morePanelEl.classList.add('hidden');
-      uiTab = btn.dataset.tab;
+
+      stopMinigame();
+      closeSheets();
+      uiTab = tab;
       render(_state);
     });
   });
 
   window.addEventListener('resize', onStageResize);
 
+  scrimEl.addEventListener('pointerdown', closeSheets);
+
   morePanelEl.querySelectorAll('.more-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       stopMinigame();
-      morePanelEl.classList.add('hidden');
+      closeSheets();
       uiTab = btn.dataset.more;
       render(_state);
     });
   });
 }
 
+// --- paneles flotantes ------------------------------------------------------
+
+function sheetFor(name) {
+  return name === 'bag' ? bagPanelEl : morePanelEl;
+}
+
+function toggleSheet(name) {
+  const panel = sheetFor(name);
+  const wasOpen = openSheet === name;
+  closeSheets();
+  if (wasOpen) return;
+
+  openSheet = name;
+  if (name === 'bag') updateBagPanel(_state);
+  panel.classList.remove('hidden');
+  scrimEl.classList.remove('hidden');
+  showBanner(null);
+  renderPillnav();
+}
+
+function closeSheets() {
+  openSheet = null;
+  bagPanelEl.classList.add('hidden');
+  morePanelEl.classList.add('hidden');
+  scrimEl.classList.add('hidden');
+  renderPillnav();
+}
+
 export function goHome() {
   uiTab = 'home';
-  morePanelEl.classList.add('hidden');
+  closeSheets();
 }
 
 // Para las pestañas que no son "Pokémon", solo se reconstruye el contenido la
@@ -153,6 +191,7 @@ export function render(state) {
   renderInfoCard(state);
   renderStatbar(state);
   renderPillnav();
+  if (openSheet === 'bag') updateBagPanel(state);
 
   if (minigameStop) return; // el minijuego es dueño de #view-root mientras esté activo
 
@@ -173,8 +212,7 @@ export function render(state) {
   if (uiTab === mountedTab) return; // ya montado, no lo reconstruimos
   mountedTab = uiTab;
 
-  if (uiTab === 'bag') renderMenu(state);
-  else if (uiTab === 'pokedex') renderPokedex(state);
+  if (uiTab === 'pokedex') renderPokedex(state);
   else if (uiTab === 'settings') renderSettings(state);
   else if (uiTab === 'info') renderInfo(state);
 }
@@ -267,12 +305,15 @@ function renderStatbar(state) {
 function renderPillnav() {
   const hide = _state.pet.phase === 'oak';
   pillnavEl.style.display = hide ? 'none' : 'flex';
-  if (hide) morePanelEl.classList.add('hidden');
+  if (hide && openSheet) closeSheets();
 
-  const moreActive = MORE_TABS.includes(uiTab) || !morePanelEl.classList.contains('hidden');
   pillnavEl.querySelectorAll('.pill-btn').forEach((btn) => {
-    const isMore = btn.dataset.tab === 'more';
-    btn.classList.toggle('active', isMore ? moreActive : btn.dataset.tab === uiTab);
+    const tab = btn.dataset.tab;
+    let active;
+    if (tab === 'more') active = openSheet === 'more' || MORE_TABS.includes(uiTab);
+    else if (tab === 'bag') active = openSheet === 'bag';
+    else active = uiTab === tab && !openSheet;
+    btn.classList.toggle('active', active);
   });
 }
 
@@ -765,51 +806,51 @@ function updateHomeDynamic(state) {
   }
 }
 
-function renderMenu(state) {
-  viewRoot.innerHTML = '';
-  const pet = state.pet;
+const BAG_ITEMS = [
+  { key: 'feed', label: 'Comida', icon: ITEM_ICONS.feed },
+  { key: 'play', label: 'Jugar', icon: ITEM_ICONS.play },
+  { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene },
+  { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine },
+];
 
-  if (pet.phase === 'egg') {
-    const p = document.createElement('p');
-    p.className = 'screen-title';
-    p.textContent = 'Todavía no hay nada que cuidar. ¡Espera a que eclosione el huevo!';
-    viewRoot.appendChild(p);
-    return;
-  }
-
-  const title = document.createElement('p');
-  title.className = 'screen-title';
-  title.textContent = 'Mochila';
-  viewRoot.appendChild(title);
-
-  const grid = document.createElement('div');
-  grid.className = 'menu-grid';
-
-  const items = [
-    { key: 'feed', label: 'Comida', icon: ITEM_ICONS.feed },
-    { key: 'play', label: 'Jugar', icon: ITEM_ICONS.play },
-    { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene },
-    { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine },
-  ];
-
-  items.forEach((item) => {
+// El contenido de la Mochila se monta una vez; al abrirla solo se actualiza
+// qué hace falta ahora mismo.
+function buildBagPanel() {
+  const grid = bagPanelEl.querySelector('.bag-grid');
+  BAG_ITEMS.forEach((item) => {
     const btn = document.createElement('button');
-    btn.className = 'menu-item';
+    btn.className = 'bag-item';
+    btn.dataset.key = item.key;
     const img = document.createElement('img');
     img.src = item.icon;
+    img.alt = '';
     const span = document.createElement('span');
     span.textContent = item.label;
-    btn.appendChild(img);
-    btn.appendChild(span);
+    btn.append(img, span);
     btn.addEventListener('click', () => onMenuAction(item.key));
     grid.appendChild(btn);
   });
+}
 
-  viewRoot.appendChild(grid);
+function updateBagPanel(state) {
+  const pet = state.pet;
+  const usable = pet.phase !== 'egg' && pet.phase !== 'oak';
+
+  bagPanelEl.querySelector('.bag-grid').classList.toggle('hidden', !usable);
+  bagPanelEl.querySelector('.sheet-empty').classList.toggle('hidden', usable);
+  if (!usable) return;
+
+  // un punto rojo en lo que toca: medicina si está malito, comida si tiene hambre
+  const urgent = { medicine: pet.sick, feed: pet.hunger < 35, clean: pet.poopCount >= 2 };
+  bagPanelEl.querySelectorAll('.bag-item').forEach((btn) => {
+    btn.classList.toggle('urgent', !!urgent[btn.dataset.key]);
+  });
 }
 
 function onMenuAction(key) {
   const { care, saveState } = _deps;
+  closeSheets();
+  stopMinigame();
   if (key === 'play') {
     startMinigame();
     return;
@@ -828,8 +869,11 @@ function onMenuAction(key) {
 }
 
 function startMinigame() {
+  // el minijuego se queda con #view-root, así que hay que soltar el mundo:
+  // si no, al volver quedarían los timers y el DOM viejo colgando
+  leaveHome();
   viewRoot.innerHTML = '';
-  mountedTab = null; // que la Mochila se reconstruya al volver del minijuego
+  mountedTab = null;
   minigameStop = mountMinigame(viewRoot, (success) => {
     minigameStop = null;
     _deps.care.applyPlayResult(_state, success);

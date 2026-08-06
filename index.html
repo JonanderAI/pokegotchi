@@ -51,7 +51,19 @@
 
     <div id="banner" class="hidden"></div>
 
-    <div id="more-panel" class="hidden">
+    <!-- Los paneles flotan sobre la barra de abajo en vez de ocupar la pantalla:
+         así el Pokémon se sigue viendo mientras cuidas de él. -->
+    <div id="sheet-scrim" class="hidden"></div>
+
+    <div id="bag-panel" class="sheet hidden">
+      <span class="sheet-grabber"></span>
+      <p class="sheet-title">Mochila</p>
+      <div class="bag-grid"></div>
+      <p class="sheet-empty hidden">Todavía no hay nada que cuidar. ¡Espera a que eclosione el huevo!</p>
+    </div>
+
+    <div id="more-panel" class="sheet hidden">
+      <span class="sheet-grabber"></span>
       <button class="more-btn" data-more="pokedex"><i class="fa-solid fa-book"></i> Pokédex</button>
       <button class="more-btn" data-more="settings"><i class="fa-solid fa-gear"></i> Ajustes</button>
       <button class="more-btn" data-more="info"><i class="fa-solid fa-circle-info"></i> Info</button>

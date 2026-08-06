@@ -465,30 +465,6 @@ html, body {
   animation: leftover-idle 1.8s steps(2) infinite;
 }
 
-/* menu de cuidados (mochila): rejilla táctil */
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  width: 100%;
-}
-.menu-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 4px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--card-bg);
-  box-shadow: 0 3px 10px rgba(20,20,40,.06);
-  font-size: 11px;
-  text-align: center;
-  color: var(--ink);
-}
-.menu-item:active { background: rgba(0,0,0,.06); }
-.menu-item img { width: 30px; height: 30px; image-rendering: pixelated; }
-
 /* pokedex */
 .dex-grid {
   display: grid;
@@ -522,31 +498,120 @@ html, body {
 
 .screen-title { width: 100%; font-size: 13px; margin-bottom: 10px; text-align: center; }
 
-/* panel "Más": aparece flotando justo encima del pill nav */
-#more-panel {
+/* Paneles flotantes (Mochila y Más): salen desde detrás del pill nav sin tapar
+   al Pokémon, para que puedas cuidarlo sin perderlo de vista. */
+#sheet-scrim {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 94px;
+  inset: 0;
+  z-index: 5;
+  background: rgba(20, 24, 40, .06);
+  backdrop-filter: blur(1px);
+}
+
+.sheet {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  background: var(--card-bg);
-  backdrop-filter: blur(8px);
+  gap: 6px;
+  padding: 10px 12px 14px;
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 22px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .8) inset,
+    0 16px 34px rgba(20, 20, 40, .18),
+    0 2px 8px rgba(20, 20, 40, .08);
+  z-index: 6;
+  animation: sheet-in .18s ease-out;
+}
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation: none; }
+}
+
+.sheet-grabber {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 2px;
+  border-radius: 999px;
+  background: rgba(20, 24, 40, .16);
+}
+.sheet-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: .5px;
+  text-align: center;
+  opacity: .55;
+}
+.sheet-empty {
+  margin: 4px 6px 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+  opacity: .7;
+}
+
+/* Mochila: cuadrícula de cuidados */
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.bag-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 4px 10px;
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  box-shadow: 0 10px 26px rgba(20,20,40,.18);
-  z-index: 6;
+  background: rgba(255, 255, 255, .75);
+  box-shadow: 0 2px 6px rgba(20, 20, 40, .05);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  text-align: center;
+  color: var(--ink);
+  transition: transform .12s ease, background .12s ease;
 }
-#more-panel.hidden { display: none; }
+.bag-item img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.bag-item:active {
+  transform: scale(.94);
+  background: rgba(42, 117, 187, .1);
+}
+/* aviso cuando hace falta: medicina si está malito, comida si tiene hambre */
+.bag-item.urgent { border-color: rgba(214, 69, 69, .5); }
+.bag-item.urgent::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d64545;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .9);
+}
+
 .more-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 12px;
   border: none;
-  border-radius: 10px;
+  border-radius: 14px;
   background: transparent;
   font-family: var(--font-pixel);
   font-size: 13px;
@@ -554,7 +619,7 @@ html, body {
   color: var(--ink);
 }
 .more-btn i { width: 18px; text-align: center; color: var(--accent); }
-.more-btn:active { background: rgba(0,0,0,.06); }
+.more-btn:active { background: rgba(42, 117, 187, .1); }
 
 /* pill nav flotante inferior */
 #pillnav {
