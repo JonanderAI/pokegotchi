@@ -16,12 +16,16 @@ export const TIMING = {
   sicknessCheckChance: 0.05,
 };
 
+export const XP_PER_LEVEL = 50;
+export const XP_PER_TICK = 0.2; // se gana solo, poco a poco, con el paso del tiempo
+
 function freshPet() {
   return {
     phase: 'egg', // egg | baby | child | teen | adult | oak
     speciesId: randomSpeciesId(),
     stageAge: 0,      // ticks en la etapa actual
     cycleTick: 0,     // ticks totales, para el ciclo día/noche
+    xp: 0,            // experiencia de la etapa actual (tiempo + interacciones)
     hunger: 100,
     happiness: 100,
     hygiene: 100,

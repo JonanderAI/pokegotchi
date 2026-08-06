@@ -27,6 +27,7 @@ export function advanceStageIfNeeded(state) {
   const wasGoodCare = goodCare(pet);
   pet.phase = STAGE_ORDER[idx + 1];
   pet.stageAge = 0;
+  pet.xp = 0;
   pet.careGoodEvents = 0;
   pet.careBadEvents = 0;
 
@@ -55,6 +56,7 @@ export function hatchNewEgg(state) {
   state.pet.speciesId = randomSpeciesId();
   state.pet.stageAge = 0;
   state.pet.cycleTick = 0;
+  state.pet.xp = 0;
   state.pet.hunger = 100;
   state.pet.happiness = 100;
   state.pet.hygiene = 100;

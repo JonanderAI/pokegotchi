@@ -1,4 +1,6 @@
-import { SPECIES_POOL } from './species-pool.js';
+// Rango completo que puede aparecer en el juego (gen 1 a gen 4, ver species-pool.js).
+const MIN_DEX_ID = 1;
+const MAX_DEX_ID = 493;
 
 // Registra una especie como "vista" la primera vez que aparece como mascota activa.
 export function registerSeen(state, id, info) {
@@ -16,11 +18,11 @@ export function registerSeen(state, id, info) {
   };
 }
 
-// IDs a mostrar en la rejilla: el pool base de huevos + cualquier evolución ya descubierta.
-export function getKnownIds(state) {
-  const ids = new Set(SPECIES_POOL);
-  Object.keys(state.pokedex).forEach((k) => ids.add(Number(k)));
-  return Array.from(ids).sort((a, b) => a - b);
+// IDs a mostrar en la rejilla: toda la Pokédex nacional del 1 al 493.
+export function getKnownIds() {
+  const ids = [];
+  for (let id = MIN_DEX_ID; id <= MAX_DEX_ID; id += 1) ids.push(id);
+  return ids;
 }
 
 export function getEntry(state, id) {

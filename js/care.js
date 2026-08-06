@@ -1,8 +1,12 @@
-import { TIMING } from './state.js';
+import { TIMING, XP_PER_TICK } from './state.js';
 import { advanceStageIfNeeded, sendToOak } from './lifecycle.js';
 
 function clamp(v) {
   return Math.max(0, Math.min(100, v));
+}
+
+function gainXp(pet, amount) {
+  pet.xp += amount;
 }
 
 export function isNight(pet) {
@@ -31,6 +35,7 @@ export function tick(state) {
 
   pet.cycleTick += 1;
   pet.stageAge += 1;
+  gainXp(pet, XP_PER_TICK);
 
   const night = isNight(pet);
   if (!night) pet.awakenedThisNight = false;
@@ -85,6 +90,7 @@ export function feed(state) {
   const woke = wakeAtNightPenalty(pet);
   pet.hunger = clamp(pet.hunger + 30);
   pet.careGoodEvents += 1;
+  gainXp(pet, 8);
   return { woke };
 }
 
@@ -93,6 +99,7 @@ export function clean(state) {
   pet.poopCount = 0;
   pet.hygiene = clamp(pet.hygiene + 40);
   pet.careGoodEvents += 1;
+  gainXp(pet, 6);
 }
 
 // Quita un único "leftover" tocado en pantalla (en vez de limpiar todos de golpe).
@@ -102,6 +109,7 @@ export function removeLeftover(state) {
   pet.poopCount -= 1;
   pet.hygiene = clamp(pet.hygiene + 15);
   pet.careGoodEvents += 1;
+  gainXp(pet, 4);
 }
 
 export function giveMedicine(state) {
@@ -109,7 +117,10 @@ export function giveMedicine(state) {
   const wasSick = pet.sick;
   pet.sick = false;
   pet.hygiene = clamp(pet.hygiene + 10);
-  if (wasSick) pet.careGoodEvents += 1;
+  if (wasSick) {
+    pet.careGoodEvents += 1;
+    gainXp(pet, 10);
+  }
   return { wasSick };
 }
 
@@ -119,6 +130,7 @@ export function discipline(state) {
   pet.mischiefActive = false;
   pet.careGoodEvents += 1;
   pet.happiness = clamp(pet.happiness + 4);
+  gainXp(pet, 8);
   return { resolved: true };
 }
 
@@ -129,11 +141,20 @@ export function applyPlayResult(state, success) {
     pet.happiness = clamp(pet.happiness + 25);
     pet.energy = clamp(pet.energy - 10);
     pet.careGoodEvents += 1;
+    gainXp(pet, 10);
   } else {
     pet.happiness = clamp(pet.happiness + 8);
     pet.energy = clamp(pet.energy - 10);
+    gainXp(pet, 3);
   }
   return { woke };
+}
+
+// Tocar directamente al Pokémon en pantalla (una caricia rápida).
+export function petTap(state) {
+  const pet = state.pet;
+  pet.happiness = clamp(pet.happiness + 4);
+  gainXp(pet, 2);
 }
 
 export function careScore(pet) {

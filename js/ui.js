@@ -2,6 +2,7 @@ import { resolveSprite, iconFor, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './spri
 import { getKnownIds, getEntry } from './pokedex.js';
 import { mountMinigame } from './minigame.js';
 import { isNight } from './care.js';
+import { XP_PER_LEVEL } from './state.js';
 
 let _state = null;
 let _deps = null;
@@ -20,6 +21,7 @@ let zEl = null;
 let leftoverEls = [];
 let currentSprite = null;
 let asleepAnimApplied = false;
+let statsExpanded = false;
 
 const PET_SIZE = 168;
 
@@ -57,13 +59,18 @@ const infoIconEl = document.getElementById('info-icon');
 const infoNameEl = document.getElementById('info-name');
 const infoStageEl = document.getElementById('info-stage');
 const infoLevelEl = document.getElementById('info-level');
+const infoXpEl = document.getElementById('info-xp');
 
 const STAGE_LEVEL_BASE = { baby: 1, child: 16, teen: 32, adult: 50 };
 const MORE_TABS = ['pokedex', 'settings', 'info'];
 
 function levelFor(pet) {
   const base = STAGE_LEVEL_BASE[pet.phase] || 1;
-  return base + Math.floor(pet.stageAge / 10);
+  return base + Math.floor(pet.xp / XP_PER_LEVEL);
+}
+
+function xpProgress(pet) {
+  return (pet.xp % XP_PER_LEVEL) / XP_PER_LEVEL;
 }
 
 function statusText(pet) {
@@ -74,6 +81,11 @@ function statusText(pet) {
 export function initUI(state, deps) {
   _state = state;
   _deps = deps;
+
+  infoCardEl.addEventListener('click', () => {
+    statsExpanded = !statsExpanded;
+    renderStatbar(_state);
+  });
 
   pillnavEl.querySelectorAll('.pill-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -105,6 +117,11 @@ export function goHome() {
   morePanelEl.classList.add('hidden');
 }
 
+// Para las pestañas que no son "Pokémon", solo se reconstruye el contenido la
+// primera vez que se entra en ellas: si no, cada tick (cada 500ms) borraría
+// cualquier botón con estado propio (p. ej. el de "reiniciar partida" armado).
+let mountedTab = null;
+
 export function render(state) {
   _state = state;
   renderInfoCard(state);
@@ -115,24 +132,25 @@ export function render(state) {
 
   if (state.pet.phase === 'oak') {
     leaveHome();
+    mountedTab = null;
     renderOak(state);
-  } else if (uiTab === 'bag') {
-    leaveHome();
-    renderMenu(state);
-  } else if (uiTab === 'pokedex') {
-    leaveHome();
-    renderPokedex(state);
-  } else if (uiTab === 'settings') {
-    leaveHome();
-    renderSettings(state);
-  } else if (uiTab === 'info') {
-    leaveHome();
-    renderInfo(state);
-  } else {
-    renderHome(state);
+    return;
   }
 
-  sanitizeAccents(screenEl);
+  if (uiTab === 'home') {
+    mountedTab = null;
+    renderHome(state);
+    return;
+  }
+
+  leaveHome();
+  if (uiTab === mountedTab) return; // ya montado, no lo reconstruimos
+  mountedTab = uiTab;
+
+  if (uiTab === 'bag') renderMenu(state);
+  else if (uiTab === 'pokedex') renderPokedex(state);
+  else if (uiTab === 'settings') renderSettings(state);
+  else if (uiTab === 'info') renderInfo(state);
 }
 
 export function showBanner(message, opts = {}) {
@@ -161,7 +179,6 @@ export function showBanner(message, opts = {}) {
   if (!opts.sticky) {
     bannerTimeout = setTimeout(() => bannerEl.classList.add('hidden'), opts.autoHideMs || 3500);
   }
-  sanitizeAccents(bannerEl);
 }
 
 function stopMinigame() {
@@ -175,26 +192,29 @@ function renderInfoCard(state) {
   const pet = state.pet;
   const hide = pet.phase === 'oak';
   infoCardEl.style.display = hide ? 'none' : 'flex';
+  infoXpEl.style.display = hide ? 'none' : 'block';
   if (hide) return;
 
   if (pet.phase === 'egg') {
     infoIconEl.src = EGG_ICON;
     infoNameEl.textContent = '???';
     infoStageEl.textContent = 'Huevo';
-    infoLevelEl.textContent = '';
+    infoLevelEl.innerHTML = '';
+    infoXpEl.querySelector('i').style.width = '0%';
     return;
   }
   const info = getEntry(state, pet.speciesId);
   infoIconEl.src = iconFor(pet.speciesId);
   infoNameEl.textContent = info ? info.name : '???';
   infoStageEl.textContent = statusText(pet);
-  infoLevelEl.textContent = `Nivel ${levelFor(pet)}`;
+  infoLevelEl.innerHTML = `<span class="nvl-label">Nvl.</span> ${levelFor(pet)}`;
+  infoXpEl.querySelector('i').style.width = `${Math.round(xpProgress(pet) * 100)}%`;
 }
 
 function renderStatbar(state) {
   const pet = state.pet;
   const visible = pet.phase !== 'egg' && pet.phase !== 'oak';
-  statbarEl.style.display = visible ? 'flex' : 'none';
+  statbarEl.classList.toggle('expanded', visible && statsExpanded);
   if (!visible) return;
 
   const values = { hunger: pet.hunger, happiness: pet.happiness, hygiene: pet.hygiene, energy: pet.energy };
@@ -516,6 +536,7 @@ function onMenuAction(key) {
 
 function startMinigame() {
   viewRoot.innerHTML = '';
+  mountedTab = null; // que la Mochila se reconstruya al volver del minijuego
   minigameStop = mountMinigame(viewRoot, (success) => {
     minigameStop = null;
     _deps.care.applyPlayResult(_state, success);
@@ -536,7 +557,7 @@ function renderPokedex(state) {
 
   const grid = document.createElement('div');
   grid.className = 'dex-grid';
-  getKnownIds(state).forEach((id) => {
+  getKnownIds().forEach((id) => {
     const entry = getEntry(state, id);
     const cell = document.createElement('div');
     cell.className = `dex-cell${entry ? '' : ' locked'}`;
@@ -570,10 +591,20 @@ function renderSettings() {
   btn.className = 'menu-item';
   btn.style.width = '100%';
   btn.textContent = 'Reiniciar partida';
+  let armed = false;
+  let armTimeout = null;
   btn.addEventListener('click', () => {
-    if (confirm('¿Seguro que quieres borrar la partida y empezar de cero?')) {
-      _deps.resetGame();
+    if (!armed) {
+      armed = true;
+      btn.textContent = '¿Seguro? Toca otra vez para borrarlo todo';
+      armTimeout = setTimeout(() => {
+        armed = false;
+        btn.textContent = 'Reiniciar partida';
+      }, 3000);
+      return;
     }
+    clearTimeout(armTimeout);
+    _deps.resetGame();
   });
   viewRoot.appendChild(btn);
 }
