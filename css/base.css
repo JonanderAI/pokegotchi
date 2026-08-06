@@ -1,0 +1,369 @@
+/* Las fuentes pixel de los juegos (sprites/fonts) no traen tildes ni "ñ",
+   así que de momento usamos una tipografía normal que sí las soporte. */
+:root {
+  --font-pixel: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --bg-top: #ffffff;
+  --bg-bottom: #eef1f7;
+  --ink: #20232b;
+  --border-color: #dde1e9;
+  --accent: #2a75bb;
+  --card-bg: rgba(255, 255, 255, 0.72);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-bottom);
+  font-family: var(--font-pixel);
+  user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+#screen {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+/* En pantallas anchas (escritorio) esto sigue siendo una vista de móvil:
+   se enmarca como un teléfono sobre un fondo degradado suave, estilo Apple. */
+@media (min-width: 640px) {
+  html, body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8f8fb 0%, #eceef4 30%, #e6e3f0 60%, #e3ecf6 100%);
+  }
+  #screen {
+    width: 390px;
+    height: 830px;
+    max-height: 92vh;
+    min-height: 0;
+    margin: 24px auto;
+    border: 10px solid #0c0c10;
+    border-radius: 46px;
+    overflow: hidden;
+    box-shadow:
+      0 30px 70px -12px rgba(20, 20, 40, .35),
+      0 0 0 1px rgba(255, 255, 255, .4) inset;
+  }
+}
+
+/* tarjeta superior con la info del Pokémon activo */
+#info-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 14px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(20, 20, 40, .06);
+  flex-shrink: 0;
+}
+#info-icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+#info-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#info-name { margin: 0; font-size: 13px; font-weight: bold; }
+#info-stage { margin: 0; font-size: 10px; opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#info-level {
+  margin: 0;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* estados: filas con icono + barra, dentro de una tarjeta */
+#statbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(20, 20, 40, .06);
+  flex-shrink: 0;
+}
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stat-row img { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; }
+
+.stat-dots {
+  display: flex;
+  gap: 5px;
+}
+.stat-dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.1);
+  border: 1px solid var(--border-color);
+}
+.stat-dots .dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+#view-root {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px 96px;
+  overflow-y: auto;
+}
+
+#banner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 100px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(20,20,40,.12);
+  z-index: 5;
+}
+
+#banner.hidden { display: none; }
+#banner button {
+  margin-top: 8px;
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+/* mascota */
+.egg-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+}
+.egg-wrap img,
+.pet-sprite-wrap img.pet-img {
+  width: 168px;
+  height: 168px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  /* por si el sprite (sobre todo los gif) trae una matte blanca en vez de alfa real */
+  mix-blend-mode: multiply;
+}
+
+.pet-stage {
+  position: relative;
+  width: 100%;
+  height: 42vh;
+  max-height: 260px;
+  min-height: 160px;
+}
+.pet-sprite-wrap {
+  position: absolute;
+  width: 168px;
+  height: 168px;
+  left: 0;
+  top: 0;
+  /* sin transición: el paseo se mueve a saltos de píxeles, no de forma fluida */
+}
+.pet-sprite-wrap.tappable { cursor: pointer; }
+
+@keyframes tapbounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.pet-sprite-wrap img.tap-bounce { animation: tapbounce .3s steps(3); }
+
+@keyframes pixelz {
+  0%   { transform: translate(0, 0); opacity: 1; }
+  25%  { transform: translate(0, -3px); opacity: 1; }
+  50%  { transform: translate(0, -3px); opacity: .5; }
+  75%  { transform: translate(0, -6px); opacity: 1; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+.sleep-z {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--ink);
+  letter-spacing: -1px;
+  animation: pixelz 1.4s steps(1) infinite;
+  pointer-events: none;
+}
+
+.pet-substatus {
+  width: 100%;
+  font-size: 11px;
+  opacity: .7;
+  text-align: center;
+  margin-top: 2px;
+}
+.leftover-item {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.25));
+  cursor: pointer;
+  z-index: 2;
+  animation: pixelz 1.8s steps(1) infinite;
+}
+
+/* menu de cuidados (mochila): rejilla táctil */
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: 0 3px 10px rgba(20,20,40,.06);
+  font-size: 11px;
+  text-align: center;
+  color: var(--ink);
+}
+.menu-item:active { background: rgba(0,0,0,.06); }
+.menu-item img { width: 30px; height: 30px; image-rendering: pixelated; }
+
+/* pokedex */
+.dex-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  width: 100%;
+  overflow-y: auto;
+}
+.dex-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.dex-cell img { width: 28px; height: 28px; image-rendering: pixelated; }
+.dex-cell.locked { filter: brightness(0); opacity: .25; }
+.dex-title { width: 100%; font-size: 13px; margin-bottom: 8px; text-align: center; }
+.dex-detail {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg);
+  width: 100%;
+}
+
+.screen-title { width: 100%; font-size: 13px; margin-bottom: 10px; text-align: center; }
+
+/* panel "Más": aparece flotando justo encima del pill nav */
+#more-panel {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 94px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--card-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(20,20,40,.18);
+  z-index: 6;
+}
+#more-panel.hidden { display: none; }
+.more-btn {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink);
+}
+.more-btn:active { background: rgba(0,0,0,.06); }
+
+/* pill nav flotante inferior */
+#pillnav {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(20,20,40,.16);
+  z-index: 7;
+}
+.pill-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--ink);
+  opacity: .6;
+  white-space: nowrap;
+}
+.pill-btn.active { opacity: 1; background: var(--accent); color: #fff; }
+
+.hidden { display: none !important; }

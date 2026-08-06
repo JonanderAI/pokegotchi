@@ -1,0 +1,79 @@
+import { randomSpeciesId } from './species-pool.js';
+
+const STORAGE_KEY = 'pokegotchi-save-v1';
+const SCHEMA_VERSION = 1;
+
+export const TICK_MS = 500;
+
+export const TIMING = {
+  eggHatch: 12,     // ticks para que el huevo eclosione
+  dayTicks: 40,     // duración del día
+  nightTicks: 30,   // duración de la noche
+  stageDuration: { baby: 50, child: 70, teen: 90, adult: 140 },
+  poopInterval: 22,
+  mischiefChance: 0.01,   // por tick, mientras está despierto
+  mischiefWindow: 14,     // ticks para regañar antes de que se resuelva solo
+  sicknessCheckChance: 0.05,
+};
+
+function freshPet() {
+  return {
+    phase: 'egg', // egg | baby | child | teen | adult | oak
+    speciesId: randomSpeciesId(),
+    stageAge: 0,      // ticks en la etapa actual
+    cycleTick: 0,     // ticks totales, para el ciclo día/noche
+    hunger: 100,
+    happiness: 100,
+    hygiene: 100,
+    energy: 100,
+    sick: false,
+    poopCount: 0,
+    mischiefActive: false,
+    mischiefDeadline: 0,
+    awakenedThisNight: false,
+    careGoodEvents: 0,
+    careBadEvents: 0,
+  };
+}
+
+function freshState() {
+  return {
+    version: SCHEMA_VERSION,
+    pet: freshPet(),
+    pokedex: {}, // { [speciesId]: { seen: true, raised: bool, name, types } }
+    lastSeenAt: Date.now(),
+  };
+}
+
+export function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return freshState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== SCHEMA_VERSION) return freshState();
+    return parsed;
+  } catch {
+    return freshState();
+  }
+}
+
+export function saveState(state) {
+  state.lastSeenAt = Date.now();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* almacenamiento no disponible, se continúa solo en memoria */
+  }
+}
+
+export function startNewEgg(state) {
+  state.pet = freshPet();
+}
+
+export function clearSave() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* almacenamiento no disponible */
+  }
+}

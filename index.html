@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>PokéGotchi</title>
+<link rel="icon" href="sprites/pokemon-icons/pokemon/icons/egg.png" />
+<link rel="stylesheet" href="css/base.css" />
+</head>
+<body>
+  <div id="screen">
+    <div id="info-card">
+      <img id="info-icon" alt="" />
+      <div id="info-text">
+        <p id="info-name">???</p>
+        <p id="info-stage"></p>
+      </div>
+      <p id="info-level"></p>
+    </div>
+
+    <div id="statbar">
+      <div class="stat-row" data-stat="hunger"><img alt="Hambre" /><div class="stat-dots"></div></div>
+      <div class="stat-row" data-stat="happiness"><img alt="Felicidad" /><div class="stat-dots"></div></div>
+      <div class="stat-row" data-stat="hygiene"><img alt="Higiene" /><div class="stat-dots"></div></div>
+      <div class="stat-row" data-stat="energy"><img alt="Energía" /><div class="stat-dots"></div></div>
+    </div>
+
+    <div id="view-root"></div>
+
+    <div id="banner" class="hidden"></div>
+
+    <div id="more-panel" class="hidden">
+      <button class="more-btn" data-more="pokedex">Pokédex</button>
+      <button class="more-btn" data-more="settings">Ajustes</button>
+      <button class="more-btn" data-more="info">Info</button>
+    </div>
+
+    <nav id="pillnav">
+      <button class="pill-btn" data-tab="home">Pokémon</button>
+      <button class="pill-btn" data-tab="bag">Mochila</button>
+      <button class="pill-btn" data-tab="more">Más</button>
+    </nav>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
