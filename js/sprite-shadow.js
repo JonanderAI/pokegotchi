@@ -231,7 +231,7 @@ function writeVars(wrapEl, { nativeW, nativeH, scale, centerX, centerY }) {
 // Escribe posición, tamaño e imagen de la sombra como variables CSS del
 // contenedor, que debe tener un hijo .pet-shadow (ver base.css).
 export function applyShadow(wrapEl, imgEl, src) {
-  measureSprite(src).then((m) => {
+  return measureSprite(src).then((m) => {
     if (!wrapEl.isConnected) return;
 
     // Los sprites con matte se recortan por filtro (ver #key-matte en el HTML):

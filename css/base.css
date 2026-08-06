@@ -243,10 +243,55 @@ html, body {
 .pet-stage {
   position: relative;
   width: 100%;
-  height: 42vh;
-  max-height: 260px;
-  min-height: 160px;
+  height: 48vh;
+  max-height: 300px;
+  min-height: 190px;
+  overflow: hidden;
+  border-radius: 16px;
+  /* el cielo: por encima de la línea del horizonte */
+  background: linear-gradient(180deg, #eef2f9 0%, #e7edf7 55%, #eaf0f6 100%);
 }
+
+/* El suelo en perspectiva. Lo dibuja world.js con la misma proyección que usan
+   los sprites, así que las líneas y los pies siempre coinciden. */
+.world-floor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.world-floor .floor-far { stop-color: #dfe7dd; }
+.world-floor .floor-near { stop-color: #eef3ea; }
+.world-floor .floor-fill {
+  fill: url(#floor-fade);
+  stroke: none;
+}
+.world-floor .floor-grid line {
+  stroke: #9fb59b;
+  stroke-width: 1;
+  opacity: .28;
+  vector-effect: non-scaling-stroke;
+}
+
+/* De noche cae la luz sobre todo el escenario, salvajes incluidos. */
+.pet-stage.night::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(38, 50, 96, .3) 0%, rgba(28, 38, 78, .17) 100%);
+}
+/* difumina el borde del fondo contra el cielo */
+.world-floor .haze-top { stop-color: #e9eef7; stop-opacity: .95; }
+.world-floor .haze-mid { stop-color: #e9eef7; stop-opacity: .55; }
+.world-floor .haze-bottom { stop-color: #e9eef7; stop-opacity: 0; }
+.world-floor .floor-haze {
+  fill: url(#floor-haze-grad);
+  pointer-events: none;
+}
+
 .pet-sprite-wrap {
   position: absolute;
   width: 168px;
@@ -255,6 +300,15 @@ html, body {
   top: 0;
   /* sin transición: el paseo se mueve a saltos de píxeles, no de forma fluida */
 }
+
+/* Pokémon salvajes: igual que la mascota pero entran y salen con un fundido */
+.wild-wrap {
+  opacity: 0;
+  transition: opacity .4s linear;
+}
+.wild-wrap.visible { opacity: 1; }
+/* colocando la comida, el toque va al suelo y no a los salvajes */
+.pet-stage.placing-food .wild-wrap { pointer-events: none; }
 .pet-sprite-wrap.tappable { cursor: pointer; }
 
 /* Sombra bajo el sprite: una elipse dibujada a la resolución del sprite y
@@ -356,38 +410,50 @@ html, body {
   text-align: center;
   margin-top: 2px;
 }
+/* Las cosas que están en el suelo (bayas, restos) se encogen con la distancia:
+   --depth-scale lo pone world.js y las animaciones lo componen para no
+   perder la perspectiva mientras se mueven. */
+.berry-item,
+.leftover-item {
+  transform-origin: 50% 100%;
+  transform: scale(var(--depth-scale, 1));
+}
+
 /* Baya que se arrastra para dar de comer */
 .berry-item {
   position: absolute;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   image-rendering: pixelated;
-  z-index: 3;
   touch-action: none;
   filter: drop-shadow(0 3px 3px rgba(20, 20, 40, .3));
 }
 .berry-item.grabbable { cursor: grab; }
 .berry-item.grabbed {
   cursor: grabbing;
-  transform: scale(1.15);
+  transform: scale(calc(var(--depth-scale, 1) * 1.2));
 }
 /* mientras espera a que la arrastren, da un botecito para que se vea */
 @keyframes berry-idle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%, 100% { transform: scale(var(--depth-scale, 1)) translateY(0); }
+  50% { transform: scale(var(--depth-scale, 1)) translateY(-5px); }
 }
 .berry-item.waiting { animation: berry-idle 1s steps(2) infinite; }
 
 /* se la come a mordiscos: tres tamaños y desaparece */
 @keyframes berry-bites {
-  0%   { transform: scale(1); }
-  33%  { transform: scale(.72) rotate(-8deg); }
-  66%  { transform: scale(.42) rotate(6deg); }
+  0%   { transform: scale(var(--depth-scale, 1)); }
+  33%  { transform: scale(calc(var(--depth-scale, 1) * .72)) rotate(-8deg); }
+  66%  { transform: scale(calc(var(--depth-scale, 1) * .42)) rotate(6deg); }
   100% { transform: scale(0); }
 }
 .berry-item.eaten { animation: berry-bites 1s steps(1) forwards; }
 
+@keyframes leftover-idle {
+  0%, 100% { transform: scale(var(--depth-scale, 1)) translateY(0); }
+  50% { transform: scale(var(--depth-scale, 1)) translateY(-3px); }
+}
 .leftover-item {
   position: absolute;
   width: 40px;
@@ -396,8 +462,7 @@ html, body {
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,.25));
   cursor: pointer;
-  z-index: 2;
-  animation: pixelz 1.8s steps(1) infinite;
+  animation: leftover-idle 1.8s steps(2) infinite;
 }
 
 /* menu de cuidados (mochila): rejilla táctil */

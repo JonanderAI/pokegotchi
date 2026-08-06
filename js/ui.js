@@ -1,6 +1,9 @@
 import { resolveSprite, iconFor, randomBerry, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
-import { getKnownIds, getEntry } from './pokedex.js';
+import { createProjection, buildFloor, placeActor, placeProp, STEP_U, STEP_V } from './world.js';
+import { mountWildPokemon } from './wild.js';
+import { getSpeciesInfo } from './pokeapi.js';
+import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
 import { mountMinigame } from './minigame.js';
 import { isNight } from './care.js';
 import { XP_PER_LEVEL } from './state.js';
@@ -26,7 +29,25 @@ let currentSprite = null;
 let asleepAnimApplied = false;
 let statsExpanded = false;
 
-const PET_SIZE = 168;
+// El escenario es un suelo en perspectiva (ver world.js). La mascota se mueve
+// por la mitad delantera y los Pokémon salvajes salen por el fondo.
+let projection = null;
+let floorEl = null;
+let petPos = { u: 0.5, v: 0.72 };
+let wild = null;
+let lastWildTapAt = 0;
+
+const PET_MIN_U = 0.08;
+const PET_MAX_U = 0.92;
+const PET_MIN_V = 0.35;
+const PET_MAX_V = 0.98;
+
+const LEFTOVER_SIZE = 40;
+const LEFTOVER_SLOTS = [
+  { u: 0.12, v: 0.62 },
+  { u: 0.88, v: 0.3 },
+  { u: 0.82, v: 0.92 },
+];
 
 function startSpriteAnimation() {
   stopFlipTimer();
@@ -104,6 +125,8 @@ export function initUI(state, deps) {
       render(_state);
     });
   });
+
+  window.addEventListener('resize', onStageResize);
 
   morePanelEl.querySelectorAll('.more-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -267,8 +290,14 @@ function stopFlipTimer() {
   }
 }
 
-const STEP_PX = 10;
 const STEP_MS = 500;
+
+// Recoloca a la mascota en el suelo según su posición en el mundo. Se llama en
+// cada paso y cada vez que cambia el tamaño del escenario.
+function placePet() {
+  if (!petWrapEl || !projection) return;
+  placeActor(petWrapEl, projection, petPos, footOffset(petWrapEl));
+}
 
 // Paseo intermitente a saltos de píxeles (sin transición suave ni giros): a ratos
 // quieto, a ratos da una tanda corta de pasos, como un Tamagotchi real.
@@ -295,7 +324,6 @@ function walkBurst(stepsLeft) {
 }
 
 let walkDir = 1;
-let walkDirY = 1;
 
 // Cada paso es un saltito: el sprite sube y baja a frames fijos y la sombra se
 // encoge un poco mientras está en el aire (las animaciones están en base.css).
@@ -312,35 +340,23 @@ function faceTo(dir) {
   if (petImgEl) petImgEl.style.setProperty('--flip', dir < 0 ? '1' : '-1');
 }
 
-// Movimiento a saltos discretos de STEP_PX cada STEP_MS: horizontal siempre,
-// vertical solo de vez en cuando (un ligero vaivén arriba/abajo).
+// Un paso mide siempre lo mismo sobre el suelo: al fondo se ve más corto y el
+// Pokémon se hace más pequeño, que es lo que da la sensación de profundidad.
 function stepOnce() {
-  const sw = petStageEl.clientWidth;
-  const sh = petStageEl.clientHeight;
-  const w = petWrapEl.offsetWidth || 128;
-  const h = petWrapEl.offsetHeight || 128;
-  const maxX = Math.max(0, sw - w);
-  const maxY = Math.max(0, sh - h);
-  const left = parseFloat(petWrapEl.style.left || '0');
-  const top = parseFloat(petWrapEl.style.top || '0');
-
-  if (left <= 0) walkDir = 1;
-  else if (left >= maxX) walkDir = -1;
+  if (petPos.u <= PET_MIN_U) walkDir = 1;
+  else if (petPos.u >= PET_MAX_U) walkDir = -1;
   else if (Math.random() < 0.06) walkDir = -walkDir;
 
   faceTo(walkDir);
+  petPos.u = Math.min(PET_MAX_U, Math.max(PET_MIN_U, petPos.u + walkDir * STEP_U));
 
-  const nextLeft = Math.min(maxX, Math.max(0, left + walkDir * STEP_PX));
-  petWrapEl.style.left = `${Math.round(nextLeft)}px`;
-
+  // de vez en cuando también se acerca o se aleja de la cámara
   if (Math.random() < 0.35) {
-    if (top <= 0) walkDirY = 1;
-    else if (top >= maxY) walkDirY = -1;
-    else if (Math.random() < 0.2) walkDirY = -walkDirY;
-    const nextTop = Math.min(maxY, Math.max(0, top + walkDirY * STEP_PX));
-    petWrapEl.style.top = `${Math.round(nextTop)}px`;
+    const towards = Math.random() < 0.5 ? -1 : 1;
+    petPos.v = Math.min(PET_MAX_V, Math.max(PET_MIN_V, petPos.v + towards * STEP_V));
   }
 
+  placePet();
   hopOnce();
 }
 
@@ -350,8 +366,9 @@ function stepOnce() {
 // arrastrar hasta un punto del escenario. El Pokémon va andando (a saltitos)
 // hasta ella y se la come a mordiscos; solo entonces cuenta como alimentado.
 
-const BERRY_SIZE = 44;
-const REACH_PX = 12;
+const BERRY_SIZE = 40;
+const REACH_U = 0.05;      // "ya la alcanza", en unidades del suelo
+const REACH_V = 0.06;
 const EAT_MS = 1000;
 const MAX_FEED_STEPS = 60; // red de seguridad por si no consigue llegar
 
@@ -359,7 +376,10 @@ function cancelFeeding() {
   if (!feeding) return;
   clearTimeout(feeding.timer);
   if (feeding.berryEl) feeding.berryEl.remove();
-  if (feeding.stageEl) feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
+  if (feeding.stageEl) {
+    feeding.stageEl.classList.remove('placing-food');
+    feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
+  }
   if (petImgEl) petImgEl.classList.remove('eating');
   feeding = null;
 }
@@ -375,13 +395,21 @@ function startFeeding() {
   el.className = 'berry-item grabbable waiting';
   el.src = berry.src;
   el.alt = 'Baya';
-  el.style.left = `${Math.round(petStageEl.clientWidth / 2 - BERRY_SIZE / 2)}px`;
-  el.style.top = `${Math.round(petStageEl.clientHeight - BERRY_SIZE)}px`;
   el.addEventListener('pointerdown', onBerryGrab);
   petStageEl.appendChild(el);
 
-  feeding = { berryEl: el, stageEl: petStageEl, phase: 'drag', timer: null, steps: 0 };
+  feeding = {
+    berryEl: el,
+    stageEl: petStageEl,
+    phase: 'drag',
+    pos: { u: 0.5, v: 0.95 }, // empieza en primer plano, a mano
+    timer: null,
+    steps: 0,
+  };
+  placeProp(el, projection, feeding.pos, BERRY_SIZE);
   stopWalkTimer();
+  // mientras se coloca la baya, los salvajes no roban el toque
+  petStageEl.classList.add('placing-food');
   petStageEl.addEventListener('pointerdown', onStagePlace);
   showBanner('Arrastra la baya donde quieras: irá a buscarla.', { sticky: true });
 }
@@ -392,21 +420,13 @@ function stagePoint(ev) {
   return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
 }
 
-// Deja la baya donde se pueda alcanzar: el sprite no puede salirse del
-// escenario, así que su punto de apoyo tampoco llega a las esquinas.
+// Deja la baya en el punto del suelo que hay bajo el dedo, dentro de la zona
+// por la que la mascota se puede mover.
 function placeBerry(x, y) {
-  const wrapW = petWrapEl ? petWrapEl.offsetWidth : PET_SIZE;
-  const wrapH = petWrapEl ? petWrapEl.offsetHeight : PET_SIZE;
-  const foot = footOffset(petWrapEl || feeding.stageEl);
-  const minX = foot.x;
-  const maxX = feeding.stageEl.clientWidth - (wrapW - foot.x);
-  const minY = foot.y;
-  const maxY = feeding.stageEl.clientHeight - (wrapH - foot.y);
-
-  const cx = Math.min(Math.max(x, minX), Math.max(minX, maxX));
-  const cy = Math.min(Math.max(y, minY), Math.max(minY, maxY));
-  feeding.berryEl.style.left = `${Math.round(cx - BERRY_SIZE / 2)}px`;
-  feeding.berryEl.style.top = `${Math.round(cy - BERRY_SIZE * 0.72)}px`;
+  const { u, v } = projection.unproject(x, y);
+  feeding.pos.u = Math.min(PET_MAX_U, Math.max(PET_MIN_U, u));
+  feeding.pos.v = Math.min(PET_MAX_V, Math.max(PET_MIN_V, v));
+  placeProp(feeding.berryEl, projection, feeding.pos, BERRY_SIZE);
 }
 
 function onBerryGrab(ev) {
@@ -452,51 +472,29 @@ function onStagePlace(ev) {
 function dropBerry() {
   feeding.phase = 'walking';
   feeding.steps = 0;
+  feeding.stageEl.classList.remove('placing-food');
   feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
   showBanner(null);
   walkToBerry();
 }
 
-function berryGround() {
-  const el = feeding.berryEl;
-  return {
-    x: parseFloat(el.style.left) + BERRY_SIZE / 2,
-    y: parseFloat(el.style.top) + BERRY_SIZE * 0.72,
-  };
-}
-
-function petFoot() {
-  const foot = footOffset(petWrapEl);
-  return {
-    x: parseFloat(petWrapEl.style.left || '0') + foot.x,
-    y: parseFloat(petWrapEl.style.top || '0') + foot.y,
-  };
-}
-
 function walkToBerry() {
   if (!feeding || feeding.phase !== 'walking' || !petWrapEl || !petStageEl) return;
 
-  const target = berryGround();
-  const foot = petFoot();
-  const dx = target.x - foot.x;
-  const dy = target.y - foot.y;
+  const du = feeding.pos.u - petPos.u;
+  const dv = feeding.pos.v - petPos.v;
 
-  if ((Math.abs(dx) <= REACH_PX && Math.abs(dy) <= REACH_PX) || feeding.steps >= MAX_FEED_STEPS) {
+  if ((Math.abs(du) <= REACH_U && Math.abs(dv) <= REACH_V) || feeding.steps >= MAX_FEED_STEPS) {
     startEating();
     return;
   }
   feeding.steps += 1;
 
-  if (Math.abs(dx) > 2) faceTo(dx < 0 ? -1 : 1);
+  if (Math.abs(du) > 0.01) faceTo(du < 0 ? -1 : 1);
 
-  const maxX = Math.max(0, petStageEl.clientWidth - petWrapEl.offsetWidth);
-  const maxY = Math.max(0, petStageEl.clientHeight - petWrapEl.offsetHeight);
-  const stepX = Math.max(-STEP_PX, Math.min(STEP_PX, dx));
-  const stepY = Math.max(-STEP_PX, Math.min(STEP_PX, dy));
-  const left = parseFloat(petWrapEl.style.left || '0') + stepX;
-  const top = parseFloat(petWrapEl.style.top || '0') + stepY;
-  petWrapEl.style.left = `${Math.round(Math.min(maxX, Math.max(0, left)))}px`;
-  petWrapEl.style.top = `${Math.round(Math.min(maxY, Math.max(0, top)))}px`;
+  petPos.u += Math.max(-STEP_U, Math.min(STEP_U, du));
+  petPos.v += Math.max(-STEP_V, Math.min(STEP_V, dv));
+  placePet();
 
   hopOnce();
   feeding.timer = setTimeout(walkToBerry, STEP_MS);
@@ -526,12 +524,74 @@ function finishEating() {
   scheduleWalk();
 }
 
+// --- Pokémon salvajes ------------------------------------------------------
+
+function mountWild(state) {
+  stopWild();
+  if (!petStageEl) return;
+  wild = mountWildPokemon(petStageEl, () => projection, {
+    excludeId: state.pet.speciesId,
+    // de noche no sale nadie (y los que estén se van)
+    isPaused: () => !petStageEl || isNight(_state.pet),
+    onTap: onWildTap,
+  });
+}
+
+function stopWild() {
+  if (!wild) return;
+  wild.stop();
+  wild = null;
+}
+
+// Tocar a un salvaje: se saluda, la mascota se anima un poco y, si hay red, la
+// especie queda registrada como vista en la Pokédex.
+async function onWildTap(actor) {
+  const now = Date.now();
+  if (now - lastWildTapAt < 1500) return;
+  lastWildTapAt = now;
+
+  _state.pet.happiness = Math.min(100, _state.pet.happiness + 2);
+  renderStatbar(_state);
+
+  const known = getEntry(_state, actor.speciesId);
+  if (known) {
+    showBanner(`¡Un ${known.name} salvaje te saluda!`);
+    return;
+  }
+
+  showBanner('¡Un Pokémon salvaje te saluda!');
+  const info = await getSpeciesInfo(actor.speciesId);
+  if (!info) return;
+  registerSeen(_state, actor.speciesId, info);
+  _deps.saveState(_state);
+  showBanner(`¡Un ${info.name} salvaje te saluda!`);
+}
+
+// El escenario cambia de tamaño al girar el móvil: se recalcula la proyección
+// y se recoloca todo lo que vive sobre el suelo.
+function onStageResize() {
+  if (!petStageEl || !petStageEl.isConnected) return;
+  projection = createProjection(petStageEl.clientWidth, petStageEl.clientHeight);
+
+  const nextFloor = buildFloor(projection);
+  if (floorEl) floorEl.replaceWith(nextFloor);
+  else petStageEl.prepend(nextFloor);
+  floorEl = nextFloor;
+
+  placePet();
+  leftoverEls.forEach((el, i) => placeProp(el, projection, LEFTOVER_SLOTS[i], LEFTOVER_SIZE));
+  if (feeding) placeProp(feeding.berryEl, projection, feeding.pos, BERRY_SIZE);
+  if (wild) wild.reflow();
+}
+
 function leaveHome() {
   if (homeKey === null) return;
   homeKey = null;
   cancelFeeding();
+  stopWild();
   stopWalkTimer();
   stopFlipTimer();
+  floorEl = null;
 }
 
 function renderHome(state) {
@@ -549,7 +609,9 @@ function renderHome(state) {
 
 function buildHomeDOM(state) {
   cancelFeeding();
+  stopWild();
   viewRoot.innerHTML = '';
+  floorEl = null;
   petStageEl = null;
   petWrapEl = null;
   petImgEl = null;
@@ -586,6 +648,14 @@ function buildHomeDOM(state) {
 
   const stage = document.createElement('div');
   stage.className = 'pet-stage';
+  // se inserta ya para poder medirlo: la proyección depende de su tamaño
+  viewRoot.appendChild(stage);
+
+  projection = createProjection(stage.clientWidth, stage.clientHeight);
+  floorEl = buildFloor(projection);
+  stage.appendChild(floorEl);
+
+  petPos = { u: 0.5, v: 0.72 };
 
   const wrap = document.createElement('div');
   wrap.className = 'pet-sprite-wrap tappable';
@@ -626,27 +696,21 @@ function buildHomeDOM(state) {
 
   stage.appendChild(wrap);
 
-  const LEFTOVER_SLOTS = [
-    { left: '8%', top: '72%' },
-    { left: '80%', top: '18%' },
-    { left: '78%', top: '70%' },
-  ];
+  // Los restos también están sobre el suelo, así que los de atrás se ven más
+  // pequeños y quedan tapados por quien pase por delante.
   leftoverEls = LEFTOVER_SLOTS.map((slot) => {
     const item = document.createElement('img');
     item.className = 'leftover-item hidden';
     item.src = ITEM_ICONS.leftovers;
-    item.style.left = slot.left;
-    item.style.top = slot.top;
     item.addEventListener('click', () => {
       _deps.care.removeLeftover(_state);
       render(_state);
       _deps.saveState(_state);
     });
     stage.appendChild(item);
+    placeProp(item, projection, slot, LEFTOVER_SIZE);
     return item;
   });
-
-  viewRoot.appendChild(stage);
 
   petStageEl = stage;
   petWrapEl = wrap;
@@ -654,15 +718,11 @@ function buildHomeDOM(state) {
   petShadowEl = shadow;
   zEl = z;
 
-  applyShadow(wrap, img, sprite.src);
+  placePet();
+  // la sombra medida da el punto de apoyo exacto: al llegar hay que recolocar
+  applyShadow(wrap, img, sprite.src).then(placePet);
 
-  requestAnimationFrame(() => {
-    if (!petStageEl) return;
-    const sw = petStageEl.clientWidth;
-    const sh = petStageEl.clientHeight;
-    wrap.style.left = `${Math.max(0, sw / 2 - PET_SIZE / 2)}px`;
-    wrap.style.top = `${Math.max(0, sh / 2 - PET_SIZE / 2)}px`;
-  });
+  mountWild(state);
 
   asleepAnimApplied = false;
   if (isNight(state.pet)) {
@@ -688,6 +748,7 @@ function updateHomeDynamic(state) {
 
   if (zEl) zEl.classList.toggle('hidden', !night);
   if (petWrapEl) petWrapEl.classList.toggle('asleep', night);
+  petStageEl.classList.toggle('night', night);
 
   if (night) {
     stopWalkTimer();
