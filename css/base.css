@@ -177,14 +177,24 @@ html, body {
 
 #view-root {
   flex: 1;
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 10px 16px 96px;
   overflow-y: auto;
+  z-index: 1;
 }
+/* Con el mundo montado, #view-root no pinta nada propio: el escenario está
+   posicionado sobre toda la pantalla y esto no debe tapar los toques. */
+#view-root:has(> .pet-stage) {
+  pointer-events: none;
+  overflow: visible;
+}
+#view-root > .pet-stage { pointer-events: auto; }
+
+/* la interfaz va por encima del mundo */
+#info-card, #info-xp, #statbar { position: relative; z-index: 2; }
 
 #banner {
   position: absolute;
@@ -201,7 +211,11 @@ html, body {
   text-align: center;
   box-shadow: 0 6px 18px rgba(20,20,40,.12);
   z-index: 5;
+  /* es un aviso, no una barrera: con el mundo a pantalla completa se solapa con
+     el suelo y no debe robarle los toques (arrastrar la baya, tocar al Pokémon) */
+  pointer-events: none;
 }
+#banner button { pointer-events: auto; }
 
 #banner.hidden { display: none; }
 #banner button {
@@ -228,8 +242,8 @@ html, body {
   position: relative;
   /* por encima de la sombra, que va posicionada dentro del mismo contenedor */
   z-index: 1;
-  width: 168px;
-  height: 168px;
+  width: var(--pet-size, 168px);
+  height: var(--pet-size, 168px);
   object-fit: contain;
   image-rendering: pixelated;
 }
@@ -240,14 +254,15 @@ html, body {
 .egg-wrap img.keyed,
 .pet-sprite-wrap img.keyed { filter: url(#key-matte); }
 
+/* El mundo ocupa la ventana entera y el resto de la interfaz flota encima.
+   Va posicionado contra #screen, no contra #view-root, para llegar de verdad a
+   los cuatro bordes. */
 .pet-stage {
-  position: relative;
-  width: 100%;
-  height: 48vh;
-  max-height: 300px;
-  min-height: 190px;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: inherit;
+  z-index: 0;
   /* el cielo: por encima de la línea del horizonte */
   background: linear-gradient(180deg, #eef2f9 0%, #e7edf7 55%, #eaf0f6 100%);
 }
@@ -261,17 +276,13 @@ html, body {
   height: 100%;
   pointer-events: none;
 }
-.world-floor .floor-far { stop-color: #dfe7dd; }
-.world-floor .floor-near { stop-color: #eef3ea; }
+/* el fondo del suelo casi se funde con el cielo: así el borde del terreno no
+   se lee como un corte recto, sino como distancia */
+.world-floor .floor-far { stop-color: #e6ebe9; }
+.world-floor .floor-near { stop-color: #e7f0e2; }
 .world-floor .floor-fill {
   fill: url(#floor-fade);
   stroke: none;
-}
-.world-floor .floor-grid line {
-  stroke: #9fb59b;
-  stroke-width: 1;
-  opacity: .28;
-  vector-effect: non-scaling-stroke;
 }
 
 /* Tilt-shift: nítido en la franja donde está tu Pokémon y cada vez más
@@ -320,8 +331,8 @@ html, body {
 
 .pet-sprite-wrap {
   position: absolute;
-  width: 168px;
-  height: 168px;
+  width: var(--pet-size, 168px);
+  height: var(--pet-size, 168px);
   left: 0;
   top: 0;
   /* sin transición: el paseo se mueve a saltos de píxeles, no de forma fluida */
@@ -418,8 +429,10 @@ html, body {
 }
 .sleep-z {
   position: absolute;
-  top: -10px;
-  right: -6px;
+  /* en proporción, no en píxeles: la caja del sprite cambia con la ventana y
+     las Zzz tienen que quedarse junto a la cabeza */
+  top: 6%;
+  right: 18%;
   font-family: var(--font-pixel);
   font-size: 16px;
   font-weight: bold;
@@ -448,8 +461,8 @@ html, body {
 /* Baya que se arrastra para dar de comer */
 .berry-item {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: var(--prop-size, 40px);
+  height: var(--prop-size, 40px);
   object-fit: contain;
   image-rendering: pixelated;
   touch-action: none;
@@ -482,8 +495,8 @@ html, body {
 }
 .leftover-item {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: var(--prop-size, 40px);
+  height: var(--prop-size, 40px);
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,.25));

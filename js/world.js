@@ -9,11 +9,11 @@
 //   v ∈ [0,1]  de fondo (0) a primer plano (1)
 
 // El punto de fuga queda por encima del encuadre (ratio negativo): así el suelo
-// llena casi todo el escenario en vez de verse como una alfombra flotando, que
-// es como se encuadra el overworld de los juegos.
+// llena la ventana entera en vez de verse como una alfombra flotando, que es
+// como se encuadra el overworld de los juegos.
 const HORIZON_RATIO = -0.45;
-const D_NEAR = 1;           // distancia de cámara al borde de abajo
-const D_FAR = 2.3;          // ...y al fondo del suelo
+const D_NEAR = 1;           // distancia de cámara al borde delantero del suelo
+const D_FAR = 2.3;          // ...y al fondo
 const EDGE_MARGIN = 0.04;   // margen para que nadie pise el borde exacto
 
 function clamp01(n) {
@@ -22,12 +22,20 @@ function clamp01(n) {
 
 // Todo (posición en pantalla, tamaño y ancho del suelo) sale de la misma
 // división por la distancia, así que suelo y sprites siempre encajan.
-export function createProjection(width, height) {
-  const horizon = height * HORIZON_RATIO;
-  const depthGain = (height - horizon) * D_NEAR; // y = horizon + depthGain / d
+//
+// `bottom` es dónde cae el borde delantero de la zona que pisa el Pokémon
+// (v = 1). No tiene por qué ser el borde de la ventana: dejando hueco debajo,
+// la franja por la que se mueve queda centrada en pantalla en vez de pegada
+// abajo, que es lo que hace que la cámara parezca apuntarle a él.
+export function createProjection(width, height, opts = {}) {
+  const bottom = opts.bottom ?? height;
+  const horizon = height * (opts.horizonRatio ?? HORIZON_RATIO);
+  const depthGain = (bottom - horizon) * D_NEAR; // y = horizon + depthGain / d
 
   const yFor = (d) => horizon + depthGain / d;
-  const depthFor = (v) => D_NEAR + (1 - clamp01(v)) * (D_FAR - D_NEAR);
+  // v puede salirse de [0,1]: el suelo se dibuja más allá de la zona pisable
+  // para que llegue hasta los bordes de la ventana.
+  const depthFor = (v) => D_NEAR + (1 - v) * (D_FAR - D_NEAR);
 
   return {
     width,
@@ -49,7 +57,7 @@ export function createProjection(width, height) {
 
     // Pantalla -> punto del suelo (para soltar cosas donde toque el dedo).
     unproject(x, y) {
-      const clampedY = Math.min(Math.max(y, yFor(D_FAR)), yFor(D_NEAR));
+      const clampedY = Math.min(Math.max(y, yFor(D_FAR) + 1), yFor(D_NEAR));
       const d = depthGain / (clampedY - horizon);
       const k = D_NEAR / d;
       const halfW = (width / 2) * k * (1 - EDGE_MARGIN);
@@ -63,6 +71,20 @@ export function createProjection(width, height) {
     layerFor(v) {
       return 10 + Math.round(clamp01(v) * 100);
     },
+  };
+}
+
+// Hasta dónde puede llegar de lado un sprite de `spriteWidth` sin que se le
+// corte nada: cuanto más cerca de la cámara está, más grande se ve y antes
+// topa con el borde de la pantalla.
+export function uRangeFor(proj, v, spriteWidth) {
+  const { scale } = proj.project(0.5, v);
+  const half = (spriteWidth * quantizeScale(scale)) / 2;
+  const halfFloor = (proj.width / 2) * scale * (1 - EDGE_MARGIN);
+  const margin = (proj.width / 2 - half) / (2 * halfFloor);
+  return {
+    min: Math.max(0, 0.5 - margin),
+    max: Math.min(1, 0.5 + margin),
   };
 }
 
@@ -88,15 +110,16 @@ export function buildFloor(proj) {
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
 
-  // El terreno se dibuja mucho más ancho que el encuadre para que no se le vean
-  // los lados: solo se ve el borde del fondo.
+  // El terreno se dibuja mucho más ancho y más adelante que la zona pisable,
+  // para que no se le vean los lados ni el borde de delante: solo el del fondo.
   const U_MIN = -3;
   const U_MAX = 4;
+  const V_NEAR = 1.6;
 
   const far = proj.project(U_MIN, 0);
   const farRight = proj.project(U_MAX, 0);
-  const near = proj.project(U_MIN, 1);
-  const nearRight = proj.project(U_MAX, 1);
+  const near = proj.project(U_MIN, V_NEAR);
+  const nearRight = proj.project(U_MAX, V_NEAR);
 
   const defs = document.createElementNS(SVG_NS, 'defs');
   defs.innerHTML = `
@@ -120,33 +143,6 @@ export function buildFloor(proj) {
     `${near.x},${near.y}`,
   ].join(' '));
   svg.appendChild(ground);
-
-  const grid = document.createElementNS(SVG_NS, 'g');
-  grid.setAttribute('class', 'floor-grid');
-
-  const line = (a, b, opacity) => {
-    const el = document.createElementNS(SVG_NS, 'line');
-    el.setAttribute('x1', a.x.toFixed(1));
-    el.setAttribute('y1', a.y.toFixed(1));
-    el.setAttribute('x2', b.x.toFixed(1));
-    el.setAttribute('y2', b.y.toFixed(1));
-    if (opacity !== undefined) el.setAttribute('opacity', opacity.toFixed(2));
-    grid.appendChild(el);
-  };
-
-  // Transversales: van a distancias repartidas de forma uniforme sobre el
-  // suelo, así que en pantalla se apelotonan solas hacia el fondo.
-  for (let i = 0; i <= 7; i += 1) {
-    const v = i / 7;
-    line(proj.project(U_MIN, v), proj.project(U_MAX, v), 0.15 + v * 0.75);
-  }
-
-  // Longitudinales: todas apuntan al punto de fuga.
-  for (let u = -1; u <= 2.0001; u += 0.25) {
-    line(proj.project(u, 0), proj.project(u, 1));
-  }
-
-  svg.appendChild(grid);
 
   // Neblina donde el suelo se junta con el fondo, para que el borde del terreno
   // no se vea como un corte recto.

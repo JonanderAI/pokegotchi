@@ -1,6 +1,6 @@
 import { resolveSprite, iconFor, randomBerry, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
-import { createProjection, buildFloor, placeActor, placeProp, STEP_U, STEP_V } from './world.js';
+import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
@@ -34,16 +34,34 @@ let statsExpanded = false;
 // por la mitad delantera y los Pokémon salvajes salen por el fondo.
 let projection = null;
 let floorEl = null;
-let petPos = { u: 0.5, v: 0.72 };
+let petPos = { u: 0.5, v: 0.78 };
 let wild = null;
 let lastWildTapAt = 0;
 
-const PET_MIN_U = 0.08;
-const PET_MAX_U = 0.92;
-const PET_MIN_V = 0.35;
+const PET_MIN_V = 0.45;
 const PET_MAX_V = 0.98;
 
-const LEFTOVER_SIZE = 40;
+// Los límites laterales no son fijos: dependen de lo grande que se vea el
+// Pokémon a esa profundidad, para que nunca se le corte medio cuerpo.
+function petULimits(v) {
+  return uRangeFor(projection, v, petSize);
+}
+
+// Con el mundo a ventana completa, el sprite ya no puede medir 168px fijos: se
+// ata al tamaño de la pantalla para que el Pokémon sea el protagonista y no una
+// figurita en medio del suelo. propSize son las cosas del suelo (bayas, restos).
+let petSize = 168;
+let propSize = 40;
+
+function applyStageMetrics(stage) {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  petSize = Math.round(Math.max(150, Math.min(300, Math.min(w * 0.6, h * 0.34))));
+  propSize = Math.round(petSize * 0.24);
+  stage.style.setProperty('--pet-size', `${petSize}px`);
+  stage.style.setProperty('--prop-size', `${propSize}px`);
+}
+
 const LEFTOVER_SLOTS = [
   { u: 0.12, v: 0.62 },
   { u: 0.88, v: 0.3 },
@@ -384,17 +402,20 @@ function faceTo(dir) {
 // Un paso mide siempre lo mismo sobre el suelo: al fondo se ve más corto y el
 // Pokémon se hace más pequeño, que es lo que da la sensación de profundidad.
 function stepOnce() {
-  if (petPos.u <= PET_MIN_U) walkDir = 1;
-  else if (petPos.u >= PET_MAX_U) walkDir = -1;
+  const limits = petULimits(petPos.v);
+  if (petPos.u <= limits.min) walkDir = 1;
+  else if (petPos.u >= limits.max) walkDir = -1;
   else if (Math.random() < 0.06) walkDir = -walkDir;
 
   faceTo(walkDir);
-  petPos.u = Math.min(PET_MAX_U, Math.max(PET_MIN_U, petPos.u + walkDir * STEP_U));
+  petPos.u = Math.min(limits.max, Math.max(limits.min, petPos.u + walkDir * STEP_U));
 
   // de vez en cuando también se acerca o se aleja de la cámara
   if (Math.random() < 0.35) {
     const towards = Math.random() < 0.5 ? -1 : 1;
     petPos.v = Math.min(PET_MAX_V, Math.max(PET_MIN_V, petPos.v + towards * STEP_V));
+    const after = petULimits(petPos.v);
+    petPos.u = Math.min(after.max, Math.max(after.min, petPos.u));
   }
 
   placePet();
@@ -407,7 +428,6 @@ function stepOnce() {
 // arrastrar hasta un punto del escenario. El Pokémon va andando (a saltitos)
 // hasta ella y se la come a mordiscos; solo entonces cuenta como alimentado.
 
-const BERRY_SIZE = 40;
 const REACH_U = 0.05;      // "ya la alcanza", en unidades del suelo
 const REACH_V = 0.06;
 const EAT_MS = 1000;
@@ -443,11 +463,11 @@ function startFeeding() {
     berryEl: el,
     stageEl: petStageEl,
     phase: 'drag',
-    pos: { u: 0.5, v: 0.95 }, // empieza en primer plano, a mano
+    pos: { u: 0.5, v: 0.86 }, // empieza en primer plano, a mano y despejada
     timer: null,
     steps: 0,
   };
-  placeProp(el, projection, feeding.pos, BERRY_SIZE);
+  placeProp(el, projection, feeding.pos, propSize);
   stopWalkTimer();
   // mientras se coloca la baya, los salvajes no roban el toque
   petStageEl.classList.add('placing-food');
@@ -465,9 +485,10 @@ function stagePoint(ev) {
 // por la que la mascota se puede mover.
 function placeBerry(x, y) {
   const { u, v } = projection.unproject(x, y);
-  feeding.pos.u = Math.min(PET_MAX_U, Math.max(PET_MIN_U, u));
   feeding.pos.v = Math.min(PET_MAX_V, Math.max(PET_MIN_V, v));
-  placeProp(feeding.berryEl, projection, feeding.pos, BERRY_SIZE);
+  const limits = petULimits(feeding.pos.v);
+  feeding.pos.u = Math.min(limits.max, Math.max(limits.min, u));
+  placeProp(feeding.berryEl, projection, feeding.pos, propSize);
 }
 
 function onBerryGrab(ev) {
@@ -610,9 +631,20 @@ async function onWildTap(actor) {
 
 // El escenario cambia de tamaño al girar el móvil: se recalcula la proyección
 // y se recoloca todo lo que vive sobre el suelo.
+// La cámara encuadra la franja por la que anda el Pokémon: el borde delantero
+// del suelo se deja justo encima de la barra de abajo, así su zona queda
+// centrada en pantalla en vez de pegada al borde inferior.
+function cameraOptions(stage) {
+  const stageTop = stage.getBoundingClientRect().top;
+  const navTop = pillnavEl.getBoundingClientRect().top;
+  const usable = navTop - stageTop - 14;
+  return { bottom: usable > stage.clientHeight * 0.5 ? usable : stage.clientHeight };
+}
+
 function onStageResize() {
   if (!petStageEl || !petStageEl.isConnected) return;
-  projection = createProjection(petStageEl.clientWidth, petStageEl.clientHeight);
+  applyStageMetrics(petStageEl);
+  projection = createProjection(petStageEl.clientWidth, petStageEl.clientHeight, cameraOptions(petStageEl));
 
   const nextFloor = buildFloor(projection);
   if (floorEl) floorEl.replaceWith(nextFloor);
@@ -620,8 +652,8 @@ function onStageResize() {
   floorEl = nextFloor;
 
   placePet();
-  leftoverEls.forEach((el, i) => placeProp(el, projection, LEFTOVER_SLOTS[i], LEFTOVER_SIZE));
-  if (feeding) placeProp(feeding.berryEl, projection, feeding.pos, BERRY_SIZE);
+  leftoverEls.forEach((el, i) => placeProp(el, projection, LEFTOVER_SLOTS[i], propSize));
+  if (feeding) placeProp(feeding.berryEl, projection, feeding.pos, propSize);
   if (wild) wild.reflow();
 }
 
@@ -692,11 +724,12 @@ function buildHomeDOM(state) {
   // se inserta ya para poder medirlo: la proyección depende de su tamaño
   viewRoot.appendChild(stage);
 
-  projection = createProjection(stage.clientWidth, stage.clientHeight);
+  applyStageMetrics(stage);
+  projection = createProjection(stage.clientWidth, stage.clientHeight, cameraOptions(stage));
   floorEl = buildFloor(projection);
   stage.appendChild(floorEl);
 
-  petPos = { u: 0.5, v: 0.72 };
+  petPos = { u: 0.5, v: 0.78 };
 
   const wrap = document.createElement('div');
   wrap.className = 'pet-sprite-wrap tappable';
@@ -749,7 +782,7 @@ function buildHomeDOM(state) {
       _deps.saveState(_state);
     });
     stage.appendChild(item);
-    placeProp(item, projection, slot, LEFTOVER_SIZE);
+    placeProp(item, projection, slot, propSize);
     return item;
   });
 
