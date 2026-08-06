@@ -274,6 +274,32 @@ html, body {
   vector-effect: non-scaling-stroke;
 }
 
+/* Tilt-shift: nítido en la franja donde está tu Pokémon y cada vez más
+   desenfocado hacia el horizonte y hacia el primerísimo plano. Es lo que hace
+   que un escenario en perspectiva se lea como una maqueta.
+   Son dos capas que desenfocan lo que tienen detrás y se desvanecen con una
+   máscara, así que la transición es gradual en vez de un corte. */
+.tilt-shift {
+  position: absolute;
+  inset: 0;
+  z-index: 250;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--tilt-blur));
+  backdrop-filter: blur(var(--tilt-blur));
+}
+/* El desenfoque se concentra junto al horizonte: lo justo para dar profundidad
+   sin que los salvajes dejen de reconocerse (y de poder tocarlos). */
+.tilt-shift.far {
+  --tilt-blur: 1.6px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 14%, transparent 42%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 14%, transparent 42%);
+}
+.tilt-shift.near {
+  --tilt-blur: 1.6px;
+  -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 16%);
+  mask-image: linear-gradient(to top, #000 0%, transparent 16%);
+}
+
 /* De noche cae la luz sobre todo el escenario, salvajes incluidos. */
 .pet-stage.night::after {
   content: '';

@@ -753,6 +753,14 @@ function buildHomeDOM(state) {
     return item;
   });
 
+  // Van al final para quedar por encima de todo lo que hay sobre el suelo: son
+  // el desenfoque de la cámara, no una capa del escenario.
+  ['far', 'near'].forEach((zone) => {
+    const layer = document.createElement('div');
+    layer.className = `tilt-shift ${zone}`;
+    stage.appendChild(layer);
+  });
+
   petStageEl = stage;
   petWrapEl = wrap;
   petImgEl = img;

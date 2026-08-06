@@ -10,11 +10,17 @@ permissions:
   pages: write
   id-token: write
 
-# Un despliegue a la vez. No cancelamos los que ya están en curso para no
-# dejar a medias una publicación que ya haya empezado.
+# Un despliegue a la vez, y el último manda.
+#
+# Antes esto era cancel-in-progress: false para no cortar una publicación a
+# medias, pero con el sitio recortado un despliegue tarda segundos, así que ya
+# no hay nada que proteger. Lo que sí pasaba es que un run atascado (esperando
+# al entorno github-pages) bloqueaba la cola indefinidamente y, peor, cada push
+# nuevo cancelaba al que estaba esperando turno: los commits se quedaban sin
+# publicar sin que fallara nada visible.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
