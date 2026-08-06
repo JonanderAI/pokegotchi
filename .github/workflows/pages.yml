@@ -31,9 +31,15 @@ jobs:
         with:
           enablement: true
 
+      # El repo trae el pack de sprites entero (42.500 ficheros). Publicarlo tal
+      # cual hace que deploy-pages se pase de los 10 minutos y el sitio se quede
+      # sin actualizar, asi que se sube solo lo que el juego pide (~4.800).
+      - name: Montar el sitio
+        run: ./tools/build-site.sh
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       # Ojo: el input timeout de esta accion esta capado a 600000 ms (10 min).
       # Pedir mas se ignora con un warning, no sirve de nada.

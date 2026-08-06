@@ -1,2 +1,5 @@
 .DS_Store
 Thumbs.db
+
+# lo que monta tools/build-site.sh para publicar
+_site/
