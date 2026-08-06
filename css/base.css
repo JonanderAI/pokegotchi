@@ -237,6 +237,45 @@ html, body {
   justify-content: center;
   min-height: 140px;
 }
+
+/* El huevo se remueve, y cuanto menos le queda más: ui.js va bajando el periodo
+   y subiendo la inclinación conforme se acerca la eclosión. A saltos fijos
+   (steps) para que se mueva como el pixel art que es. */
+@keyframes egg-stir {
+  0%   { transform: rotate(0) translateY(0); }
+  20%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -1)) translateY(0); }
+  40%  { transform: rotate(var(--egg-tilt, 2deg)) translateY(calc(var(--egg-lift, 0px) * -1)); }
+  60%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -1)) translateY(0); }
+  80%  { transform: rotate(var(--egg-tilt, 2deg)) translateY(0); }
+  100% { transform: rotate(0) translateY(0); }
+}
+.egg-wrap img {
+  transform-origin: 50% 100%;
+  animation: egg-stir var(--egg-period, 2.6s) steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .egg-wrap img { animation: none; }
+}
+
+
+/* el fogonazo de luz que acompaña a las dos */
+@keyframes burst {
+  0%   { transform: translate(-50%, -50%) scale(.2); opacity: .9; }
+  60%  { transform: translate(-50%, -50%) scale(1.6); opacity: .5; }
+  100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+.pet-burst {
+  position: absolute;
+  left: var(--shadow-x, 50%);
+  top: var(--sprite-top, 40%);
+  width: var(--sprite-w, 60%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.95) 0%, rgba(255,247,214,.7) 45%, rgba(255,247,214,0) 70%);
+  pointer-events: none;
+  z-index: 2;
+  animation: burst .6s steps(4) forwards;
+}
 .egg-wrap img,
 .pet-sprite-wrap .pet-img {
   position: relative;
@@ -422,6 +461,31 @@ html, body {
   100% { transform: scaleX(var(--flip, 1)) translateY(0); }
 }
 .pet-sprite-wrap .pet-img.eating { animation: chomp .34s steps(1) 3; }
+
+/* Eclosión y evolución: el sprite se queda en blanco y parpadea, como cuando
+   evoluciona en los juegos, y sale de golpe a su tamaño. */
+@keyframes flash-white {
+  0%, 100% { filter: none; }
+  50% { filter: brightness(0) invert(1) drop-shadow(0 0 6px rgba(255,255,255,.9)); }
+}
+/* Cinco posiciones fijas repartidas por igual (steps(1)): sale pequeño, se
+   pasa de grande y se asienta. Nada de interpolar, que esto es pixel art. */
+@keyframes pop-in {
+  0%   { transform: scaleX(var(--flip, 1)) scale(.35); }
+  20%  { transform: scaleX(var(--flip, 1)) scale(1.3); }
+  40%  { transform: scaleX(var(--flip, 1)) scale(.85); }
+  60%  { transform: scaleX(var(--flip, 1)) scale(1.1); }
+  80%  { transform: scaleX(var(--flip, 1)) scale(1); }
+  100% { transform: scaleX(var(--flip, 1)) scale(1); }
+}
+.pet-sprite-wrap .pet-img.hatching {
+  animation: pop-in .5s steps(1), flash-white .5s steps(1) 2;
+}
+.pet-sprite-wrap .pet-img.evolving {
+  animation: pop-in .6s steps(1), flash-white .34s steps(1) 5;
+}
+/* van después del salto y del mordisco a propósito: mientras se celebra, la
+   celebración manda sobre el paseo */
 
 @keyframes pixelz {
   0%   { transform: translate(0, 0); opacity: 1; }

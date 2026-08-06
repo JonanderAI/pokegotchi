@@ -6,7 +6,7 @@ import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
 import { mountMinigame } from './minigame.js';
-import { isNight } from './care.js';
+import { isNight, eggProgress } from './care.js';
 import { XP_PER_LEVEL } from './state.js';
 
 let _state = null;
@@ -38,6 +38,8 @@ let floorEl = null;
 let petPos = { u: 0.5, v: 0.78 };
 let wild = null;
 let lastWildTapAt = 0;
+let eggImgEl = null;
+let pendingIntro = null; // 'hatch' | 'evolve'
 
 const PET_MIN_V = 0.45;
 const PET_MAX_V = 0.98;
@@ -191,6 +193,12 @@ function closeSheets() {
   morePanelEl.classList.add('hidden');
   scrimEl.classList.add('hidden');
   renderPillnav();
+}
+
+// main.js avisa de que toca celebrar algo; la animación se aplica al montar el
+// sprite nuevo, que es cuando existe el elemento.
+export function playIntro(kind) {
+  pendingIntro = kind;
 }
 
 export function goHome() {
@@ -676,6 +684,7 @@ function buildHomeDOM(state) {
   cancelFeeding();
   stopWild();
   viewRoot.innerHTML = '';
+  eggImgEl = null;
   floorEl = null;
   petStageEl = null;
   petWrapEl = null;
@@ -698,6 +707,7 @@ function buildHomeDOM(state) {
       img.src = EGG_ICON;
       applyShadow(wrap, img, EGG_ICON);
     };
+    eggImgEl = img;
     wrap.appendChild(img);
     const label = document.createElement('p');
     label.className = 'pet-substatus';
@@ -705,6 +715,7 @@ function buildHomeDOM(state) {
     viewRoot.appendChild(wrap);
     viewRoot.appendChild(label);
     applyShadow(wrap, img, EGG_SPRITE);
+    updateEgg(state);
     return;
   }
 
@@ -813,11 +824,41 @@ function buildHomeDOM(state) {
   }
 
   scheduleWalk();
+  playPendingIntro(wrap, img);
+}
+
+// La eclosión y la evolución se celebran igual: fogonazo de luz y el sprite
+// saliendo de golpe, parpadeando en blanco como en los juegos. Se hace aquí
+// porque es cuando existe el sprite nuevo.
+function playPendingIntro(wrap, img) {
+  if (!pendingIntro) return;
+  const kind = pendingIntro;
+  pendingIntro = null;
+
+  img.classList.add(kind === 'evolve' ? 'evolving' : 'hatching');
+
+  const burst = document.createElement('div');
+  burst.className = 'pet-burst';
+  wrap.appendChild(burst);
+  setTimeout(() => burst.remove(), 700);
+}
+
+// Cuanto menos le queda al huevo, más rápido y más fuerte se remueve.
+function updateEgg(state) {
+  if (!eggImgEl) return;
+  const p = eggProgress(state.pet);
+  eggImgEl.style.setProperty('--egg-period', `${(2.6 - p * 2.05).toFixed(2)}s`);
+  eggImgEl.style.setProperty('--egg-tilt', `${(1.5 + p * 8).toFixed(1)}deg`);
+  eggImgEl.style.setProperty('--egg-lift', `${Math.round(p * 7)}px`);
 }
 
 function updateHomeDynamic(state) {
   const pet = state.pet;
-  if (pet.phase === 'egg' || !petStageEl) return;
+  if (pet.phase === 'egg') {
+    updateEgg(state);
+    return;
+  }
+  if (!petStageEl) return;
 
   const night = isNight(pet);
 

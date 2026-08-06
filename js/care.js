@@ -20,12 +20,10 @@ export function tick(state) {
   const events = [];
 
   if (pet.phase === 'egg') {
-    pet.stageAge += 1;
-    if (pet.stageAge >= TIMING.eggHatch) {
-      pet.phase = 'baby';
-      pet.stageAge = 0;
-      events.push({ type: 'hatched' });
-    }
+    // El huevo se mide en segundos, no en ticks del juego: si ha pasado un tick
+    // entero (un minuto) es que hace mucho que le tocaba salir.
+    hatch(pet);
+    events.push({ type: 'hatched' });
     return events;
   }
 
@@ -88,6 +86,29 @@ export function catchUp(state) {
   const events = [];
   for (let i = 0; i < ticks; i += 1) events.push(...tick(state));
   return { ticks, skipped: due - ticks, events };
+}
+
+function hatch(pet) {
+  pet.phase = 'baby';
+  pet.stageAge = 0;
+  pet.eggMs = 0;
+}
+
+// El huevo corre con el reloj de la pantalla (cada 500 ms), no con el del
+// juego: son 12 segundos, no un tick.
+export function tickEgg(state, elapsedMs) {
+  const pet = state.pet;
+  if (pet.phase !== 'egg') return [];
+  pet.eggMs = (pet.eggMs || 0) + elapsedMs;
+  if (pet.eggMs < TIMING.eggHatchMs) return [];
+  hatch(pet);
+  return [{ type: 'hatched' }];
+}
+
+// De 0 a 1: cuanto le queda al huevo. La UI lo usa para agitarlo cada vez mas.
+export function eggProgress(pet) {
+  if (pet.phase !== 'egg') return 0;
+  return Math.min(1, (pet.eggMs || 0) / TIMING.eggHatchMs);
 }
 
 function wakeAtNightPenalty(pet) {

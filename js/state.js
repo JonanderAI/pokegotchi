@@ -19,7 +19,10 @@ export const SIM_TICK_MS = 60000;
 export const MAX_CATCHUP_TICKS = 480;
 
 export const TIMING = {
-  eggHatch: 5,      // ticks para que el huevo eclosione
+  // El huevo va aparte del reloj del juego: es la entrada, y hacer esperar
+  // minutos delante de un huevo quieto no tiene ninguna gracia. Se mueve por
+  // tiempo real y eclosiona en 12 segundos, agitandose cada vez mas.
+  eggHatchMs: 12000,
   dayTicks: 40,     // duración del día
   nightTicks: 30,   // duración de la noche
   stageDuration: { baby: 50, child: 70, teen: 90, adult: 140 },
@@ -36,6 +39,7 @@ function freshPet() {
   return {
     phase: 'egg', // egg | baby | child | teen | adult | oak
     speciesId: randomSpeciesId(),
+    eggMs: 0,         // lo que lleva el huevo, en tiempo real
     stageAge: 0,      // ticks en la etapa actual
     cycleTick: 0,     // ticks totales, para el ciclo día/noche
     xp: 0,            // experiencia de la etapa actual (tiempo + interacciones)

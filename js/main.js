@@ -4,7 +4,7 @@ import * as care from './care.js';
 import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { registerSeen } from './pokedex.js';
-import { initUI, render, showBanner, goHome } from './ui.js';
+import { initUI, render, showBanner, goHome, playIntro } from './ui.js';
 
 const state = loadState();
 
@@ -33,6 +33,7 @@ function handleEvents(events, { quiet = false } = {}) {
   events.forEach((ev) => {
     if (ev.type === 'hatched') {
       notify('¡El huevo ha eclosionado!');
+      if (!quiet) playIntro('hatch');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {
       notify('Tu Pokémon está enfermo. Dale una medicina en la Mochila.', { sticky: true });
@@ -56,6 +57,7 @@ function handleEvents(events, { quiet = false } = {}) {
   if (state.pendingEvolutionNotice) {
     state.pendingEvolutionNotice = null;
     notify('¡Tu Pokémon ha evolucionado!');
+    if (!quiet) playIntro('evolve');
     ensureSpeciesRegistered();
   }
 }
@@ -83,16 +85,24 @@ let lastLoopAt = Date.now();
 
 function loop() {
   const now = Date.now();
-  pending += now - lastLoopAt;
-  lastLoopAt = now;
+  const elapsed = now - lastLoopAt;
+  pending += elapsed;
 
   const events = [];
+
+  // el huevo va por su cuenta, con el reloj de la pantalla
+  if (state.pet.phase === 'egg') events.push(...care.tickEgg(state, elapsed));
+
   while (pending >= SIM_TICK_MS) {
     pending -= SIM_TICK_MS;
     events.push(...care.tick(state));
   }
 
-  if (events.length) handleEvents(events);
+  lastLoopAt = now;
+  // sin condicion: handleEvents tambien recoge el aviso de evolucion, que lo
+  // deja puesto la consulta a PokeAPI cuando le da la gana y no viene como
+  // evento del tick
+  handleEvents(events);
   render(state);
   saveState(state);
 }
