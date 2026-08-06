@@ -9,6 +9,26 @@
 <link rel="stylesheet" href="css/base.css" />
 </head>
 <body>
+  <!-- Los sprites animados de Gen 2 no traen alfa, sino una matte blanca. Este
+       filtro la recorta de verdad (alfa = 0 solo en el blanco puro) en vez de
+       disimularla con mix-blend-mode: multiply, que dejaba transparentarse la
+       sombra a través del Pokémon. -->
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <filter id="key-matte" color-interpolation-filters="sRGB">
+      <!-- máscara: opaca salvo donde el píxel es (casi) blanco puro -->
+      <feColorMatrix type="matrix" values="0 0 0 0 0
+                                           0 0 0 0 0
+                                           0 0 0 0 0
+                                          -1 -1 -1 0 2.9" result="matte" />
+      <feComponentTransfer in="matte" result="matte-hard">
+        <feFuncA type="linear" slope="60" />
+      </feComponentTransfer>
+      <!-- se recorta el sprite original con esa máscara: así fuera de la imagen
+           sigue sin pintarse nada (si no, el transparente saldría negro) -->
+      <feComposite in="SourceGraphic" in2="matte-hard" operator="in" />
+    </filter>
+  </svg>
+
   <div id="screen">
     <div id="info-card">
       <div id="info-icon-box"><img id="info-icon" alt="" /></div>

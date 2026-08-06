@@ -108,6 +108,9 @@ function measurePixels(img) {
   }
 
   return {
+    // El sprite viene con fondo opaco (los GIF de Gen 2 traen matte blanca en
+    // vez de alfa): hay que recortarlo antes de pintarlo sobre la sombra.
+    matte: matteOpaque,
     // +1 porque son índices de píxel y queremos el borde exterior.
     boxLeft: left,
     boxRight: right + 1,
@@ -230,6 +233,11 @@ function writeVars(wrapEl, { nativeW, nativeH, scale, centerX, centerY }) {
 export function applyShadow(wrapEl, imgEl, src) {
   measureSprite(src).then((m) => {
     if (!wrapEl.isConnected) return;
+
+    // Los sprites con matte se recortan por filtro (ver #key-matte en el HTML):
+    // si no, al pintarlos sobre la sombra se les vería el cuadrado de fondo.
+    imgEl.classList.toggle('keyed', !!(m && m.matte));
+
     const boxW = imgEl.clientWidth || wrapEl.clientWidth;
     const boxH = imgEl.clientHeight || wrapEl.clientHeight;
     if (!boxW || !boxH) return;

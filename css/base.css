@@ -232,11 +232,13 @@ html, body {
   height: 168px;
   object-fit: contain;
   image-rendering: pixelated;
-  /* por si el sprite (sobre todo los gif) trae una matte blanca en vez de alfa real.
-     De paso hace que la sombra se vea a través de esa matte, en vez de quedar
-     tapada por un cuadrado blanco. */
-  mix-blend-mode: multiply;
 }
+/* Sprites que vienen con matte en vez de alfa (los GIF de Gen 2): se les
+   recorta el blanco puro para que no tapen la sombra con un cuadrado.
+   Antes esto se disimulaba con mix-blend-mode: multiply, pero al multiplicar
+   con lo que hay detrás la sombra se transparentaba a través del Pokémon. */
+.egg-wrap img.keyed,
+.pet-sprite-wrap img.keyed { filter: url(#key-matte); }
 
 .pet-stage {
   position: relative;
