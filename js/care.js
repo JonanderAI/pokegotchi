@@ -1,4 +1,4 @@
-import { TIMING, XP_PER_TICK } from './state.js';
+import { TIMING, XP_PER_TICK, SIM_TICK_MS, MAX_CATCHUP_TICKS } from './state.js';
 import { advanceStageIfNeeded, sendToOak } from './lifecycle.js';
 
 function clamp(v) {
@@ -74,6 +74,20 @@ export function tick(state) {
   if (stageEvent) events.push(stageEvent);
 
   return events;
+}
+
+// Al abrir el juego se recupera el tiempo que ha pasado con la pestaña cerrada:
+// se ejecutan los ticks que tocaban, con tope, para que el Pokémon siga su vida
+// aunque no estés mirando. Devuelve cuánto tiempo ha pasado y qué ha ocurrido.
+export function catchUp(state) {
+  const elapsed = Date.now() - (state.lastSeenAt || Date.now());
+  const due = Math.floor(elapsed / SIM_TICK_MS);
+  if (due <= 0) return { ticks: 0, skipped: 0, events: [] };
+
+  const ticks = Math.min(due, MAX_CATCHUP_TICKS);
+  const events = [];
+  for (let i = 0; i < ticks; i += 1) events.push(...tick(state));
+  return { ticks, skipped: due - ticks, events };
 }
 
 function wakeAtNightPenalty(pet) {

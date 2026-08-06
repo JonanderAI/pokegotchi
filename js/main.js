@@ -1,4 +1,4 @@
-import { loadState, saveState, clearSave, TICK_MS } from './state.js';
+import { loadState, saveState, clearSave, TICK_MS, SIM_TICK_MS } from './state.js';
 import * as care from './care.js';
 import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
@@ -23,15 +23,20 @@ async function tryRefineEgg() {
   }
 }
 
-function handleEvents(events) {
+// `quiet` sirve para la puesta al día: al volver tras horas fuera llegan
+// decenas de eventos de golpe y no tiene sentido soltarlos uno detrás de otro,
+// pero sus efectos (registrar la especie tras eclosionar o evolucionar) sí.
+function handleEvents(events, { quiet = false } = {}) {
+  const notify = (...args) => { if (!quiet) showBanner(...args); };
+
   events.forEach((ev) => {
     if (ev.type === 'hatched') {
-      showBanner('¡El huevo ha eclosionado!');
+      notify('¡El huevo ha eclosionado!');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {
-      showBanner('Tu Pokémon está enfermo. Dale una medicina en la Mochila.', { sticky: true });
+      notify('Tu Pokémon está enfermo. Dale una medicina en la Mochila.', { sticky: true });
     } else if (ev.type === 'mischief_start') {
-      showBanner('¡Tu Pokémon está haciendo una travesura!', {
+      notify('¡Tu Pokémon está haciendo una travesura!', {
         sticky: true,
         actionLabel: 'Regañar',
         onAction: () => {
@@ -41,15 +46,15 @@ function handleEvents(events) {
         },
       });
     } else if (ev.type === 'mischief_timeout') {
-      showBanner('Se le pasó la travesura sin que le regañaras...');
+      notify('Se le pasó la travesura sin que le regañaras...');
     } else if (ev.type === 'stage_advance') {
-      showBanner(ev.goodCare ? '¡Ha crecido feliz y sano!' : 'Ha crecido, pero necesita más cuidados...');
+      notify(ev.goodCare ? '¡Ha crecido feliz y sano!' : 'Ha crecido, pero necesita más cuidados...');
     }
   });
 
   if (state.pendingEvolutionNotice) {
     state.pendingEvolutionNotice = null;
-    showBanner('¡Tu Pokémon ha evolucionado!');
+    notify('¡Tu Pokémon ha evolucionado!');
     ensureSpeciesRegistered();
   }
 }
@@ -68,14 +73,62 @@ function resetGame() {
   location.reload();
 }
 
+// La pantalla se repinta cada TICK_MS, pero la simulación avanza por tiempo
+// real transcurrido, no por veces que se ha llamado a loop: los navegadores
+// frenan los timers de las pestañas en segundo plano, y si contáramos llamadas
+// el Pokémon iría más lento por tenerlo de fondo.
+let pending = 0;
+let lastLoopAt = Date.now();
+
 function loop() {
-  const events = care.tick(state);
-  handleEvents(events);
+  const now = Date.now();
+  pending += now - lastLoopAt;
+  lastLoopAt = now;
+
+  const events = [];
+  while (pending >= SIM_TICK_MS) {
+    pending -= SIM_TICK_MS;
+    events.push(...care.tick(state));
+  }
+
+  if (events.length) handleEvents(events);
   render(state);
   saveState(state);
 }
 
+function describeAway(ticks) {
+  const minutes = Math.round((ticks * SIM_TICK_MS) / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
+// Lo que ha pasado mientras no estabas, antes de arrancar el bucle.
+function applyTimeAway() {
+  const { ticks, events } = care.catchUp(state);
+  if (!ticks) return;
+
+  handleEvents(events, { quiet: true });
+
+  // El aviso se saca del estado en el que ha quedado, no del último evento de
+  // la ráfaga: lo urgente manda, y si no, se resume el rato que ha pasado solo.
+  if (state.pet.phase === 'oak') {
+    // la despedida del profesor ya ocupa la pantalla entera
+  } else if (state.pet.mischiefActive) {
+    handleEvents([{ type: 'mischief_start' }]);
+  } else if (state.pet.sick) {
+    handleEvents([{ type: 'sick' }]);
+  } else {
+    const crecio = events.some((ev) => ev.type === 'stage_advance');
+    showBanner(`Han pasado ${describeAway(ticks)} desde tu última visita${crecio ? ' y ha crecido' : ''}.`);
+  }
+
+  saveState(state);
+}
+
 initUI(state, { care, onOakContinue, saveState, resetGame });
+applyTimeAway();
 ensureSpeciesRegistered();
 tryRefineEgg();
 render(state);

@@ -3,10 +3,23 @@ import { randomSpeciesId } from './species-pool.js';
 const STORAGE_KEY = 'pokegotchi-save-v1';
 const SCHEMA_VERSION = 1;
 
+// Cada cuánto se repinta la pantalla. No tiene nada que ver con la velocidad
+// del juego: es solo para que la interfaz vaya al día.
 export const TICK_MS = 500;
 
+// Cada cuánto avanza la simulación de verdad. Estaba a 500 ms, lo que hacía que
+// un Pokémon naciera, creciera y se fuera con Oak en menos de tres minutos:
+// ritmo de demo. A un minuto por tick el ciclo día/noche dura 1h10 y una vida
+// entera unas 6 horas, que es lo que hace que cuidarlo signifique algo.
+export const SIM_TICK_MS = 60000;
+
+// Tope de la puesta al día al volver: 8 horas. Más que eso y no se sigue
+// castigando, para que dejar la pestaña cerrada un fin de semana no te lo
+// devuelva muerto de hambre.
+export const MAX_CATCHUP_TICKS = 480;
+
 export const TIMING = {
-  eggHatch: 12,     // ticks para que el huevo eclosione
+  eggHatch: 5,      // ticks para que el huevo eclosione
   dayTicks: 40,     // duración del día
   nightTicks: 30,   // duración de la noche
   stageDuration: { baby: 50, child: 70, teen: 90, adult: 140 },
