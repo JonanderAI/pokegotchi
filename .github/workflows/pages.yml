@@ -37,3 +37,7 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Los 600 s por defecto no llegan: la cola de Pages está tardando
+          # ~6 min en arrancar y otros ~4 min en publicar. 30 min da margen.
+          timeout: 1800000
