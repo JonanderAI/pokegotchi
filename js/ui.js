@@ -460,7 +460,7 @@ function placePet() {
 // quieto, a ratos da una tanda corta de pasos, como un Tamagotchi real.
 function scheduleWalk() {
   stopWalkTimer();
-  if (!petStageEl || !petWrapEl || feeding || playdate || game || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || game || calling || isNight(_state.pet)) return;
 
   const willWalk = Math.random() < 0.55;
   if (willWalk) {
@@ -471,7 +471,7 @@ function scheduleWalk() {
 }
 
 function walkBurst(stepsLeft) {
-  if (!petStageEl || !petWrapEl || feeding || playdate || game || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || game || calling || isNight(_state.pet)) return;
   if (stepsLeft <= 0) {
     walkTimer = setTimeout(scheduleWalk, 1200 + Math.random() * 2200);
     return;
@@ -497,6 +497,17 @@ function faceTo(dir) {
   if (petImgEl) petImgEl.style.setProperty('--flip', dir < 0 ? '1' : '-1');
 }
 
+// Un salto de verdad, más alto que el saltito de cada paso: se usa cuando se
+// pone contento (al acariciarle o al llegar donde le llamas).
+function happyJump() {
+  [petImgEl, petShadowEl].forEach((el) => {
+    if (!el) return;
+    el.classList.remove('big-hop');
+    void el.offsetWidth;
+    el.classList.add('big-hop');
+  });
+}
+
 // Un paso mide siempre lo mismo sobre el suelo: al fondo se ve más corto y el
 // Pokémon se hace más pequeño, que es lo que da la sensación de profundidad.
 function stepOnce() {
@@ -518,6 +529,101 @@ function stepOnce() {
 
   placePet();
   hopOnce();
+}
+
+// --- llamarle con dos toques -----------------------------------------------
+//
+// Tocando dos veces seguidas un punto del suelo, el Pokémon te hace caso: da dos
+// saltitos donde está, como diciendo "voy", y se acerca corriendo (pasos más
+// largos y más seguidos que en el paseo de siempre).
+
+const DOUBLE_TAP_MS = 340;   // margen entre los dos toques
+const DOUBLE_TAP_PX = 44;    // y lo cerca que tienen que caer el uno del otro
+const CALL_STEP_MS = 190;    // frente a los 500 del paseo normal
+const CALL_STEP_MUL = 1.7;   // zancada más larga
+const MAX_CALL_STEPS = 40;
+
+let calling = null;
+let lastStageTap = null;
+
+// Un toque en el suelo, no en algo que ya tenga lo suyo que hacer al tocarlo.
+function isBareFloorTap(ev) {
+  return !ev.target.closest('.pet-sprite-wrap, .leftover-item, .berry-item, .tappable');
+}
+
+function onStageTap(ev) {
+  if (feeding || playdate || game || evolving) return;
+  if (!petStageEl || !projection || isNight(_state.pet)) return;
+  if (!isBareFloorTap(ev)) return;
+
+  const rect = petStageEl.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
+  const now = Date.now();
+
+  const isDouble = lastStageTap
+    && now - lastStageTap.at < DOUBLE_TAP_MS
+    && Math.hypot(x - lastStageTap.x, y - lastStageTap.y) < DOUBLE_TAP_PX;
+
+  if (!isDouble) {
+    lastStageTap = { at: now, x, y };
+    return;
+  }
+  lastStageTap = null;
+  callPetTo(x, y);
+}
+
+function callPetTo(x, y) {
+  const { u, v } = projection.unproject(x, y);
+  const target = { v: Math.min(PET_MAX_V, Math.max(PET_MIN_V, v)) };
+  const limits = petULimits(target.v);
+  target.u = Math.min(limits.max, Math.max(limits.min, u));
+
+  stopCall();
+  stopWalkTimer();
+  calling = { pos: target, steps: 0, timer: null };
+
+  // primero los dos saltitos de "voy", y luego sale corriendo
+  if (Math.abs(target.u - petPos.u) > 0.01) faceTo(target.u < petPos.u ? -1 : 1);
+  hopOnce();
+  calling.timer = setTimeout(() => {
+    if (!calling) return;
+    hopOnce();
+    calling.timer = setTimeout(walkToCall, 180);
+  }, 180);
+}
+
+function walkToCall() {
+  if (!calling || !petWrapEl || !petStageEl || feeding || playdate || game) return stopCall();
+  if (isNight(_state.pet)) return stopCall();
+
+  const du = calling.pos.u - petPos.u;
+  const dv = calling.pos.v - petPos.v;
+
+  if ((Math.abs(du) <= REACH_U && Math.abs(dv) <= REACH_V) || calling.steps >= MAX_CALL_STEPS) {
+    stopCall();
+    happyJump(); // llega y salta: ha venido porque le has llamado
+    if (!walkTimer) scheduleWalk();
+    return;
+  }
+  calling.steps += 1;
+
+  if (Math.abs(du) > 0.01) faceTo(du < 0 ? -1 : 1);
+
+  const stepU = STEP_U * CALL_STEP_MUL;
+  const stepV = STEP_V * CALL_STEP_MUL;
+  petPos.u += Math.max(-stepU, Math.min(stepU, du));
+  petPos.v += Math.max(-stepV, Math.min(stepV, dv));
+  placePet();
+
+  hopOnce();
+  calling.timer = setTimeout(walkToCall, CALL_STEP_MS);
+}
+
+function stopCall() {
+  if (!calling) return;
+  clearTimeout(calling.timer);
+  calling = null;
 }
 
 // --- dar de comer ----------------------------------------------------------
@@ -840,14 +946,27 @@ function startPlaydate() {
   bounce();
 }
 
+// Rojo y rosa pastel, para que la tanda no salga toda del mismo color.
+const HEART_COLORS = ['#ff9db1', '#ffb3c4', '#f4788f', '#ffc2cf'];
+
+// Cada corazón sale con su propia desviación, y se inclina hacia donde se va:
+// si tira a la derecha se ladea a la derecha. Así no parecen tres copias.
 function spawnHeart() {
   if (!petWrapEl) return;
-  const heart = document.createElement('img');
-  heart.className = 'play-heart';
-  heart.src = ITEM_ICONS.happiness;
-  heart.style.setProperty('--drift', `${Math.round((Math.random() - 0.5) * 40)}px`);
+  const heart = document.createElement('i');
+  heart.className = 'play-heart fa-solid fa-heart';
+
+  const drift = Math.round((Math.random() - 0.5) * 70);
+  heart.style.setProperty('--drift', `${drift}px`);
+  // el ladeo acompaña a la deriva, con algo de suelto para que no sea calcado
+  heart.style.setProperty('--tilt', `${(drift * 0.35 + (Math.random() - 0.5) * 14).toFixed(1)}deg`);
+  heart.style.setProperty('--rise', `${-(52 + Math.random() * 26).toFixed(0)}px`);
+  heart.style.setProperty('--size', `${(15 + Math.random() * 9).toFixed(0)}px`);
+  heart.style.setProperty('--spin', `${((Math.random() - 0.5) * 26).toFixed(1)}deg`);
+  heart.style.setProperty('--heart-color', HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)]);
+
   petWrapEl.appendChild(heart);
-  setTimeout(() => heart.remove(), 900);
+  setTimeout(() => heart.remove(), 1100);
 }
 
 function finishPlaydate() {
@@ -922,6 +1041,7 @@ function leaveHome() {
   cancelPlaydate();
   cancelFeeding();
   stopWild();
+  stopCall();
   stopWalkTimer();
   destroyPetAnim();
   floorEl = null;
@@ -1028,15 +1148,24 @@ function buildHomeDOM(state) {
     const now = Date.now();
     if (now - lastPetTapAt < 2500) return;
     lastPetTapAt = now;
-    _state.pet.happiness = Math.min(100, _state.pet.happiness + 4);
+    _deps.care.petTap(_state);
+
     img.classList.remove('tap-bounce');
     shadow.classList.remove('tap-bounce');
     void img.offsetWidth; // reinicia la animación aunque se repita rápido
     img.classList.add('tap-bounce');
     shadow.classList.add('tap-bounce');
+
+    // Corazones saliendo escalonados y, cuando acaba la caricia, un salto de
+    // contento: la respuesta a que le hagas caso tiene que verse.
+    for (let i = 0; i < 3; i += 1) setTimeout(spawnHeart, i * 140);
+    setTimeout(happyJump, 340);
+
     renderStatbar(_state);
+    _deps.saveState(_state);
   });
 
+  stage.addEventListener('pointerdown', onStageTap);
   stage.appendChild(wrap);
 
   // Los restos también están sobre el suelo, así que los de atrás se ven más
@@ -1136,7 +1265,6 @@ const NEED_LOOK = {
   hungry:   { icon: 'fa-drumstick-bite',        color: '#f4a973', label: 'Tiene hambre' },
   tired:    { icon: 'fa-face-tired',            color: '#aab6cc', label: 'Está cansado' },
   sad:      { icon: 'fa-face-frown',            color: '#93c1f0', label: 'Está triste' },
-  happy:    { icon: 'fa-face-smile-beam',       color: '#86d9b3', label: 'Está genial' },
 };
 
 // Cuánto dura el "cargando" antes de que cambie el sprite: el Pokémon tiembla y
@@ -1147,6 +1275,7 @@ function startEvolution() {
   if (evolving || !_state.pet.pendingEvolution) return;
   evolving = true;
 
+  stopCall();
   if (bubbleEl) bubbleEl.classList.add('hidden');
   if (petImgEl) petImgEl.classList.add('evolve-charge');
   if (petStageEl) petStageEl.classList.add('evolve-charge-stage');
@@ -1185,7 +1314,7 @@ function renderBubbles(state) {
       el.className = 'pet-bubble';
       el.style.setProperty('--i', i); // su sitio en la diagonal, lo coloca el CSS
       el.classList.toggle('urgent', need.urgent);
-      el.classList.toggle('calm', need.key === 'happy' || need.key === 'sleeping');
+      el.classList.toggle('calm', need.key === 'sleeping');
       // el de evolución no es un aviso, es un botón: se puede tocar
       el.classList.toggle('action', !!need.action);
       el.style.setProperty('--bubble-color', look.color);
@@ -1230,6 +1359,7 @@ function updateHomeDynamic(state) {
   petStageEl.classList.toggle('night', night);
 
   if (night) {
+    stopCall();
     stopWalkTimer();
     if (!asleepAnimApplied) {
       asleepAnimApplied = true;

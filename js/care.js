@@ -294,8 +294,8 @@ export function currentNeeds(pet) {
     .sort((a, b) => a.value - b.value)
     .forEach((c) => out.push(need(c.key, c.value)));
 
-  // Si no hay nada que reclamar, que al menos se le vea contento.
-  if (!out.length) out.push(need('happy', 100));
+  // Si no hay nada que reclamar no sale ningún bocadillo: que aparezcan solo
+  // cuando necesita algo es lo que hace que mirarlos signifique algo.
   return out.slice(0, MAX_NEEDS);
 }
 

@@ -699,12 +699,21 @@ html, body {
   height: 11px;
   left: -1px;
   bottom: -4px;
+  animation: tail-dot 2.4s ease-in-out infinite;
 }
 .pet-bubble:first-child::after {
   width: 6px;
   height: 6px;
   left: -9px;
   bottom: -13px;
+  animation: tail-dot 2.4s ease-in-out .22s infinite;
+}
+
+/* los puntos van latiendo hacia la cabeza, el pequeño un pelín después que el
+   grande: así el rabito parece que sale del Pokémon y no que está pegado */
+@keyframes tail-dot {
+  0%, 100% { transform: scale(.7); opacity: .7; }
+  45%      { transform: scale(1); opacity: 1; }
 }
 
 /* cuando todo va bien o está dormido no hace falta que grite */
@@ -764,10 +773,21 @@ html, body {
   to   { opacity: 1; }
 }
 
-/* cada bocadillo es un nodo nuevo cada vez que cambia la lista, así que la
-   entrada se dispara sola al crearlo */
-.pet-bubble { animation: bubble-pop .28s ease-out; }
-.pet-bubble.urgent { animation: bubble-pop .28s ease-out, bubble-urgent 1.1s ease-in-out .28s infinite; }
+/* Cada bocadillo es un nodo nuevo cada vez que cambia la lista, así que la
+   entrada se dispara sola al crearlo; después se queda flotando. El retraso del
+   flotar depende de su sitio en la diagonal para que no suban todos a la vez. */
+.pet-bubble {
+  animation:
+    bubble-pop .28s ease-out,
+    bubble-float 2.4s ease-in-out infinite;
+  animation-delay: 0s, calc(.28s + var(--i, 0) * .28s);
+}
+.pet-bubble.urgent {
+  animation:
+    bubble-pop .28s ease-out,
+    bubble-urgent 1.1s ease-in-out infinite;
+  animation-delay: 0s, calc(.28s + var(--i, 0) * .14s);
+}
 
 @keyframes bubble-pop {
   0%   { transform: scale(.4); opacity: 0; }
@@ -775,15 +795,21 @@ html, body {
   100% { transform: scale(1); opacity: 1; }
 }
 
+@keyframes bubble-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-5px) scale(1.02); }
+}
+
 @keyframes bubble-urgent {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.12); }
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-3px) scale(1.12); }
 }
 
 /* va al final a proposito: si no, las reglas de animacion de arriba, con la
    misma especificidad y posteriores, lo pisarian */
 @media (prefers-reduced-motion: reduce) {
   .pet-bubble, .pet-bubble.urgent, .pet-bubble.action { animation: none; }
+  .pet-bubble:first-child::before, .pet-bubble:first-child::after { animation: none; }
   .pet-sprite-wrap .pet-img.evolve-charge { animation: evolve-whiten 1.4s ease-in forwards; }
 }
 
@@ -814,23 +840,57 @@ html, body {
   filter: drop-shadow(0 3px 3px rgba(20, 20, 40, .3));
 }
 
-/* corazoncitos mientras juegan juntos */
+/* Corazones: al acariciarle y al jugar con un salvaje. Cada uno lleva su deriva,
+   su ladeo (que acompaña a la deriva: el que se va a la derecha se inclina a la
+   derecha), su altura y su tamaño, así que no salen tres iguales. */
 @keyframes heart-float {
-  0%   { transform: translate(-50%, 0) scale(.6); opacity: 0; }
-  25%  { transform: translate(-50%, -18px) scale(1); opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--drift, 0px)), -70px) scale(.9); opacity: 0; }
+  0% {
+    transform: translate(-50%, 0) rotate(0deg) scale(.3);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -14px) rotate(calc(var(--tilt, 0deg) * .5)) scale(1.15);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(-50% + var(--drift, 0px) * .35), -26px)
+               rotate(var(--tilt, 0deg)) scale(1);
+    opacity: 1;
+  }
+  70% { opacity: .9; }
+  100% {
+    transform: translate(calc(-50% + var(--drift, 0px)), var(--rise, -70px))
+               rotate(calc(var(--tilt, 0deg) + var(--spin, 0deg))) scale(.75);
+    opacity: 0;
+  }
 }
 .play-heart {
   position: absolute;
   left: var(--shadow-x, 50%);
   top: var(--sprite-top, 30%);
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  image-rendering: pixelated;
+  font-size: var(--size, 20px);
+  line-height: 1;
+  /* rosa pastel, alternando con uno algo más rojo para que la tanda tenga vida */
+  color: var(--heart-color, #ff9db1);
   pointer-events: none;
   z-index: 3;
-  animation: heart-float .9s steps(6) forwards;
+  animation: heart-float 1.1s cubic-bezier(.25, .7, .35, 1) forwards;
+}
+
+/* Salto de contento: más alto que el saltito de cada paso, y la sombra se
+   encoge mientras está en el aire. */
+@keyframes big-hop {
+  0%   { transform: scaleX(var(--flip, 1)) translateY(0); }
+  30%  { transform: scaleX(var(--flip, 1)) translateY(-16px); }
+  55%  { transform: scaleX(var(--flip, 1)) translateY(-20px); }
+  80%  { transform: scaleX(var(--flip, 1)) translateY(-6px); }
+  100% { transform: scaleX(var(--flip, 1)) translateY(0); }
+}
+.pet-sprite-wrap .pet-img.big-hop { animation: big-hop .5s steps(4); }
+.pet-shadow.big-hop { animation: shadow-shrink .5s steps(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-sprite-wrap .pet-img.big-hop, .pet-shadow.big-hop { animation: none; }
 }
 
 /* minijuego: las bayas que caen del cielo */
