@@ -120,12 +120,15 @@ function wakeAtNightPenalty(pet) {
   return false;
 }
 
-export function feed(state) {
+// `special` son las bayas que regalan los salvajes: alimentan mas y dan mas
+// experiencia, para que valga la pena guardarlas.
+export function feed(state, { special = false } = {}) {
   const pet = state.pet;
   const woke = wakeAtNightPenalty(pet);
-  pet.hunger = clamp(pet.hunger + 30);
+  pet.hunger = clamp(pet.hunger + (special ? 45 : 30));
+  if (special) pet.happiness = clamp(pet.happiness + 6);
   pet.careGoodEvents += 1;
-  gainXp(pet, 12);
+  gainXp(pet, special ? 18 : 12);
   return { woke };
 }
 
@@ -192,8 +195,14 @@ export function petTap(state) {
   gainXp(pet, 2);
 }
 
+// Bayas ricas: son las que regalan los salvajes al jugar con ellos.
+const GIFT_BERRIES = ['sitrus', 'lum', 'leppa', 'oran', 'aguav', 'figy', 'mago', 'wiki', 'iapapa'];
+const MAX_GIFTS = 6;
+const GIFT_CHANCE = 0.45;
+
 // Jugar con un Pokémon salvaje que se ha acercado: es la interacción que más
-// da, porque hay que estar delante y pillarlo mientras anda por ahí.
+// da, porque hay que estar delante y pillarlo mientras anda por ahí. A veces
+// además se despide dejándote una baya.
 export function playWithWild(state) {
   const pet = state.pet;
   const woke = wakeAtNightPenalty(pet);
@@ -201,7 +210,35 @@ export function playWithWild(state) {
   pet.energy = clamp(pet.energy - 4);
   pet.careGoodEvents += 1;
   gainXp(pet, 18);
-  return { woke };
+
+  let gift = null;
+  if (!state.gifts) state.gifts = [];
+  if (Math.random() < GIFT_CHANCE && state.gifts.length < MAX_GIFTS) {
+    gift = GIFT_BERRIES[Math.floor(Math.random() * GIFT_BERRIES.length)];
+    state.gifts.push(gift);
+  }
+  return { woke, gift };
+}
+
+export function takeGift(state, name) {
+  const i = (state.gifts || []).indexOf(name);
+  if (i >= 0) state.gifts.splice(i, 1);
+}
+
+// Cada baya atrapada en el minijuego cuenta: la partida entera se resuelve
+// luego con applyPlayResult.
+export function catchBerry(state) {
+  const pet = state.pet;
+  pet.happiness = clamp(pet.happiness + 2);
+  pet.hunger = clamp(pet.hunger + 3);
+  gainXp(pet, 3);
+}
+
+// De 0 a 1: como se encuentra. La UI lo usa para animarlo mas rapido o mas
+// lento, que es la forma mas directa de que se le note el animo.
+export function mood(pet) {
+  if (pet.sick) return 0.15;
+  return Math.max(0, Math.min(1, (pet.happiness * 0.7 + pet.energy * 0.3) / 100));
 }
 
 export function careScore(pet) {

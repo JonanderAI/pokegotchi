@@ -1,12 +1,11 @@
-import { resolveSprite, iconFor, randomBerries, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
+import { resolveSprite, iconFor, randomBerries, berryNamed, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
 import { animateSprite } from './sprite-anim.js';
 import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
-import { mountMinigame } from './minigame.js';
-import { isNight, eggProgress } from './care.js';
+import { isNight, eggProgress, mood } from './care.js';
 import { XP_PER_LEVEL } from './state.js';
 
 let _state = null;
@@ -14,7 +13,7 @@ let _deps = null;
 let uiTab = 'home';
 let openSheet = null; // 'bag' | 'more' | null
 let dexSelected = null;
-let minigameStop = null;
+let game = null;   // partida del minijuego en curso
 let lastPetTapAt = 0;
 let bannerTimeout = null;
 let walkTimer = null;
@@ -101,6 +100,9 @@ const morePanelEl = document.getElementById('more-panel');
 const bagPanelEl = document.getElementById('bag-panel');
 const scrimEl = document.getElementById('sheet-scrim');
 const berryPanelEl = document.getElementById('berry-panel');
+const namePanelEl = document.getElementById('name-panel');
+const nameFormEl = document.getElementById('name-form');
+const nameInputEl = document.getElementById('name-input');
 const statbarEl = document.getElementById('statbar');
 const infoCardEl = document.getElementById('info-card');
 const infoIconEl = document.getElementById('info-icon');
@@ -159,6 +161,15 @@ export function initUI(state, deps) {
 
   scrimEl.addEventListener('pointerdown', closeSheets);
 
+  nameFormEl.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    _state.pet.nickname = nameInputEl.value.trim().slice(0, 12);
+    closeSheets();
+    render(_state);
+    _deps.saveState(_state);
+    if (_state.pet.nickname) showBanner(`¡Ahora se llama ${_state.pet.nickname}!`);
+  });
+
   morePanelEl.querySelectorAll('.more-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       stopMinigame();
@@ -171,7 +182,7 @@ export function initUI(state, deps) {
 
 // --- paneles flotantes ------------------------------------------------------
 
-const SHEETS = { bag: bagPanelEl, more: morePanelEl, berry: berryPanelEl };
+const SHEETS = { bag: bagPanelEl, more: morePanelEl, berry: berryPanelEl, name: namePanelEl };
 
 function sheetFor(name) {
   return SHEETS[name];
@@ -209,6 +220,14 @@ function openSheetNamed(name) {
 
 // main.js avisa de que toca celebrar algo; la animación se aplica al montar el
 // sprite nuevo, que es cuando existe el elemento.
+// El mote se pide al eclosionar (desde el aviso) y se puede cambiar en Ajustes.
+export function askNickname() {
+  if (_state.pet.phase === 'egg' || _state.pet.phase === 'oak') return;
+  nameInputEl.value = _state.pet.nickname || '';
+  openSheetNamed('name');
+  setTimeout(() => nameInputEl.focus(), 60);
+}
+
 export function playIntro(kind) {
   pendingIntro = kind;
 }
@@ -229,8 +248,6 @@ export function render(state) {
   renderStatbar(state);
   renderPillnav();
   if (openSheet === 'bag') updateBagPanel(state);
-
-  if (minigameStop) return; // el minijuego es dueño de #view-root mientras esté activo
 
   if (state.pet.phase === 'oak') {
     leaveHome();
@@ -282,13 +299,6 @@ export function showBanner(message, opts = {}) {
   }
 }
 
-function stopMinigame() {
-  if (minigameStop) {
-    minigameStop();
-    minigameStop = null;
-  }
-}
-
 function renderInfoCard(state) {
   const pet = state.pet;
   const hide = pet.phase === 'oak';
@@ -306,7 +316,8 @@ function renderInfoCard(state) {
   }
   const info = getEntry(state, pet.speciesId);
   infoIconEl.src = iconFor(pet.speciesId);
-  infoNameEl.textContent = info ? info.name : '???';
+  // manda el mote; si no le has puesto ninguno, el nombre de su especie
+  infoNameEl.textContent = pet.nickname || (info ? info.name : '???');
   infoStageEl.textContent = statusText(pet);
   infoLevelEl.innerHTML = `<span class="nvl-label">Nvl.</span> ${levelFor(pet)}`;
   infoXpEl.querySelector('i').style.width = `${Math.round(xpProgress(pet) * 100)}%`;
@@ -374,7 +385,7 @@ function placePet() {
 // quieto, a ratos da una tanda corta de pasos, como un Tamagotchi real.
 function scheduleWalk() {
   stopWalkTimer();
-  if (!petStageEl || !petWrapEl || feeding || playdate || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || game || isNight(_state.pet)) return;
 
   const willWalk = Math.random() < 0.55;
   if (willWalk) {
@@ -385,7 +396,7 @@ function scheduleWalk() {
 }
 
 function walkBurst(stepsLeft) {
-  if (!petStageEl || !petWrapEl || feeding || playdate || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || game || isNight(_state.pet)) return;
   if (stepsLeft <= 0) {
     walkTimer = setTimeout(scheduleWalk, 1200 + Math.random() * 2200);
     return;
@@ -468,9 +479,14 @@ function startFeeding() {
   // mochila) y luego se lanza tocando el suelo.
   const grid = berryPanelEl.querySelector('.berry-grid');
   grid.innerHTML = '';
-  randomBerries(6).forEach((berry) => {
+
+  // Delante las que te han regalado los salvajes: alimentan más y se gastan.
+  const regalos = (_state.gifts || []).map((name) => ({ ...berryNamed(name), gift: true }));
+  const opciones = [...regalos, ...randomBerries(Math.max(2, 6 - regalos.length))];
+
+  opciones.forEach((berry) => {
     const btn = document.createElement('button');
-    btn.className = 'berry-choice';
+    btn.className = `berry-choice${berry.gift ? ' gift' : ''}`;
     const img = document.createElement('img');
     img.src = berry.src;
     img.alt = berry.name;
@@ -494,6 +510,7 @@ function armBerry(berry) {
 
   feeding = {
     berryEl: el,
+    berry,
     stageEl: petStageEl,
     phase: 'aiming',
     pos: { u: 0.5, v: 0.8 },
@@ -596,12 +613,17 @@ function startEating() {
 
 function finishEating() {
   const el = feeding.berryEl;
+  const berry = feeding.berry;
   feeding = null;
   if (el) el.remove();
   if (petImgEl) petImgEl.classList.remove('eating');
 
-  const { woke } = _deps.care.feed(_state);
-  showBanner(woke ? '¡Ñam! Le has despertado, pero se la ha comido.' : '¡Ñam! Se ha comido la baya.');
+  const especial = !!(berry && berry.gift);
+  if (especial) _deps.care.takeGift(_state, berry.name);
+  const { woke } = _deps.care.feed(_state, { special: especial });
+  showBanner(woke
+    ? '¡Ñam! Le has despertado, pero se la ha comido.'
+    : especial ? '¡Ñam! Esa baya le ha encantado.' : '¡Ñam! Se ha comido la baya.');
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
@@ -636,6 +658,7 @@ const PLAY_HOP_MS = 340;
 const MAX_PLAY_STEPS = 40;
 
 function onWildTap(actor) {
+  if (game) return;
   const now = Date.now();
   if (now - lastWildTapAt < 1200) return;
   lastWildTapAt = now;
@@ -748,8 +771,9 @@ function finishPlaydate() {
   actor.busy = false;
   actor.leaving = true; // se despide y sigue su camino
 
-  const { woke } = _deps.care.playWithWild(_state);
-  showBanner(woke ? '¡Le has despertado, pero se lo ha pasado bien!' : '¡Qué bien lo habéis pasado juntos!');
+  const { woke, gift } = _deps.care.playWithWild(_state);
+  if (gift) showBanner('¡Qué bien lo habéis pasado! Se despide dejándote una baya.');
+  else showBanner(woke ? '¡Le has despertado, pero se lo ha pasado bien!' : '¡Qué bien lo habéis pasado juntos!');
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
@@ -794,6 +818,7 @@ function onStageResize() {
 function leaveHome() {
   if (homeKey === null) return;
   homeKey = null;
+  stopMinigame();
   cancelPlaydate();
   cancelFeeding();
   stopWild();
@@ -815,6 +840,7 @@ function renderHome(state) {
 }
 
 function buildHomeDOM(state) {
+  stopMinigame();
   cancelPlaydate();
   cancelFeeding();
   stopWild();
@@ -1001,6 +1027,11 @@ function updateHomeDynamic(state) {
     el.classList.toggle('hidden', i >= pet.poopCount);
   });
 
+  // El ánimo se ve en cómo se mueve: contento va más vivo, decaído o malito se
+  // arrastra. Es lo que se puede hacer ahora que la animación la llevamos
+  // nosotros y no el GIF.
+  if (petAnim) petAnim.setSpeed(0.6 + mood(pet) * 0.7);
+
   if (zEl) zEl.classList.toggle('hidden', !night);
   if (petWrapEl) petWrapEl.classList.toggle('asleep', night);
   petStageEl.classList.toggle('night', night);
@@ -1082,19 +1113,154 @@ function onMenuAction(key) {
   saveState(_state);
 }
 
+// --- minijuego: atrapar bayas ----------------------------------------------
+//
+// Caen bayas del cielo y arrastras el dedo para que tu Pokémon corra a
+// cogerlas antes de que toquen el suelo. Se juega dentro del mundo, no en otra
+// pantalla: por eso se mueve con la misma proyección y los mismos saltitos que
+// el paseo normal, solo que más rápido.
+
+const GAME_MS = 26000;
+const GAME_DROP_MS = 1300;   // cada cuánto cae una baya
+const GAME_FALL_MS = 2100;   // lo que tarda en llegar al suelo
+const GAME_STEP_MS = 150;    // el paso durante la partida, mucho más ágil
+const GAME_STEP_U = 0.045;
+const GAME_CATCH_U = 0.1;
+const GAME_GOAL = 5;         // bayas para considerar la partida un éxito
+
 function startMinigame() {
-  // el minijuego se queda con #view-root, así que hay que soltar el mundo:
-  // si no, al volver quedarían los timers y el DOM viejo colgando
-  leaveHome();
-  viewRoot.innerHTML = '';
-  mountedTab = null;
-  minigameStop = mountMinigame(viewRoot, (success) => {
-    minigameStop = null;
-    _deps.care.applyPlayResult(_state, success);
-    showBanner(success ? '¡Buena partida! Tu Pokémon está más feliz.' : 'No ha ido muy bien, ¡pero lo ha pasado bien!');
-    render(_state);
-    _deps.saveState(_state);
+  cancelPlaydate();
+  cancelFeeding();
+  goHome();
+  render(_state);
+  if (!petStageEl) return;
+
+  stopWalkTimer();
+  game = {
+    berries: [],
+    score: 0,
+    targetU: petPos.u,
+    endsAt: Date.now() + GAME_MS,
+    dropTimer: null,
+    stepTimer: null,
+    endTimer: null,
+  };
+
+  petStageEl.classList.add('playing');
+  petStageEl.addEventListener('pointerdown', onGamePoint);
+  petStageEl.addEventListener('pointermove', onGamePoint);
+
+  showBanner('¡Arrastra para atrapar las bayas!', { sticky: true });
+  gameDrop();
+  gameStep();
+  game.endTimer = setTimeout(endMinigame, GAME_MS);
+}
+
+function onGamePoint(ev) {
+  if (!game || ev.buttons === 0 && ev.type === 'pointermove') return;
+  const rect = petStageEl.getBoundingClientRect();
+  const { u } = projection.unproject(ev.clientX - rect.left, ev.clientY - rect.top);
+  const limits = petULimits(petPos.v);
+  game.targetU = Math.min(limits.max, Math.max(limits.min, u));
+}
+
+// La mascota corre hacia donde tengas el dedo, a pasos cortos y rápidos.
+function gameStep() {
+  if (!game || !petWrapEl) return;
+  const du = game.targetU - petPos.u;
+  if (Math.abs(du) > 0.005) {
+    faceTo(du < 0 ? -1 : 1);
+    petPos.u += Math.max(-GAME_STEP_U, Math.min(GAME_STEP_U, du));
+    placePet();
+    hopOnce();
+  }
+  game.stepTimer = setTimeout(gameStep, GAME_STEP_MS);
+}
+
+function gameDrop() {
+  if (!game) return;
+
+  const [berry] = randomBerries(1);
+  const el = document.createElement('img');
+  el.className = 'berry-item falling';
+  el.src = berry.src;
+  el.alt = '';
+  petStageEl.appendChild(el);
+
+  const limits = petULimits(petPos.v);
+  const pos = {
+    u: limits.min + Math.random() * (limits.max - limits.min),
+    v: petPos.v,
+  };
+  placeProp(el, projection, pos, propSize);
+
+  const scale = el.style.getPropertyValue('--depth-scale') || 1;
+  const anim = el.animate(
+    [
+      { transform: `translateY(-320px) scale(${scale})` },
+      { transform: `translateY(0) scale(${scale})` },
+    ],
+    { duration: GAME_FALL_MS, easing: 'cubic-bezier(.5,0,1,.5)' },
+  );
+
+  const item = { el, pos, anim };
+  game.berries.push(item);
+  anim.onfinish = () => resolveBerry(item);
+
+  game.dropTimer = setTimeout(gameDrop, GAME_DROP_MS);
+}
+
+// Al tocar el suelo se mira si la mascota estaba debajo.
+function resolveBerry(item) {
+  if (!game) return;
+  const i = game.berries.indexOf(item);
+  if (i >= 0) game.berries.splice(i, 1);
+
+  const cogida = Math.abs(item.pos.u - petPos.u) <= GAME_CATCH_U;
+  if (cogida) {
+    game.score += 1;
+    _deps.care.catchBerry(_state);
+    spawnHeart();
+    hopOnce();
+    item.el.remove();
+    renderInfoCard(_state);
+  } else {
+    item.el.classList.add('missed');
+    setTimeout(() => item.el.remove(), 400);
+  }
+}
+
+function endMinigame() {
+  if (!game) return;
+  const { score } = game;
+  stopMinigame();
+
+  const exito = score >= GAME_GOAL;
+  _deps.care.applyPlayResult(_state, exito);
+  showBanner(exito
+    ? `¡${score} bayas! Lo habéis pasado en grande.`
+    : `${score} bayas... la próxima vez seguro que más.`);
+  render(_state);
+  _deps.saveState(_state);
+  scheduleWalk();
+}
+
+function stopMinigame() {
+  if (!game) return;
+  clearTimeout(game.dropTimer);
+  clearTimeout(game.stepTimer);
+  clearTimeout(game.endTimer);
+  game.berries.forEach((b) => {
+    b.anim.onfinish = null;
+    b.anim.cancel();
+    b.el.remove();
   });
+  game = null;
+  if (petStageEl) {
+    petStageEl.classList.remove('playing');
+    petStageEl.removeEventListener('pointerdown', onGamePoint);
+    petStageEl.removeEventListener('pointermove', onGamePoint);
+  }
 }
 
 function renderPokedex(state) {
@@ -1137,6 +1303,13 @@ function renderSettings() {
   title.className = 'screen-title';
   title.textContent = 'Ajustes';
   viewRoot.appendChild(title);
+
+  const nameBtn = document.createElement('button');
+  nameBtn.className = 'menu-item';
+  nameBtn.style.width = '100%';
+  nameBtn.textContent = 'Ponerle un mote';
+  nameBtn.addEventListener('click', askNickname);
+  viewRoot.appendChild(nameBtn);
 
   const btn = document.createElement('button');
   btn.className = 'menu-item';

@@ -43,6 +43,7 @@ function freshPet() {
   return {
     phase: 'egg', // egg | baby | child | teen | adult | oak
     speciesId: randomSpeciesId(),
+    nickname: '',     // el mote que le pongas; si no, va con el de su especie
     eggMs: 0,         // lo que lleva el huevo, en tiempo real
     stageAge: 0,      // ticks en la etapa actual
     cycleTick: 0,     // ticks totales, para el ciclo día/noche
@@ -66,6 +67,7 @@ function freshState() {
     version: SCHEMA_VERSION,
     pet: freshPet(),
     pokedex: {}, // { [speciesId]: { seen: true, raised: bool, name, types } }
+    gifts: [],   // bayas que te han regalado los salvajes, por su nombre
     lastSeenAt: Date.now(),
   };
 }

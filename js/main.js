@@ -4,7 +4,7 @@ import * as care from './care.js';
 import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { registerSeen } from './pokedex.js';
-import { initUI, render, showBanner, goHome, playIntro } from './ui.js';
+import { initUI, render, showBanner, goHome, playIntro, askNickname } from './ui.js';
 
 const state = loadState();
 
@@ -32,7 +32,7 @@ function handleEvents(events, { quiet = false } = {}) {
 
   events.forEach((ev) => {
     if (ev.type === 'hatched') {
-      notify('¡El huevo ha eclosionado!');
+      notify('¡El huevo ha eclosionado!', { actionLabel: 'Ponerle nombre', onAction: askNickname });
       if (!quiet) playIntro('hatch');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {

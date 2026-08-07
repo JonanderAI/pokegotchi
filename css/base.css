@@ -557,6 +557,45 @@ html, body {
   animation: heart-float .9s steps(6) forwards;
 }
 
+/* minijuego: las bayas que caen del cielo */
+.berry-item.falling { z-index: 4; }
+@keyframes berry-missed {
+  0% { opacity: 1; transform: scale(var(--depth-scale, 1)); }
+  100% { opacity: 0; transform: scale(calc(var(--depth-scale, 1) * .7)) translateY(6px); }
+}
+.berry-item.missed { animation: berry-missed .4s steps(2) forwards; }
+/* durante la partida el dedo manda sobre el escenario, no sobre los actores */
+.pet-stage.playing .wild-wrap,
+.pet-stage.playing .pet-sprite-wrap { pointer-events: none; }
+.pet-stage.playing { touch-action: none; }
+
+/* el mote */
+#name-form {
+  display: flex;
+  gap: 8px;
+}
+#name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .8);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  color: var(--ink);
+}
+#name-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#name-form button {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 13px;
+}
+
 /* la bandeja para elegir qué baya lanzar */
 .berry-grid {
   display: grid;
@@ -582,6 +621,12 @@ html, body {
 .berry-choice:active {
   transform: scale(.9);
   background: rgba(42, 117, 187, .12);
+}
+/* las que te han regalado los salvajes: alimentan más y se gastan */
+.berry-choice.gift {
+  border-color: rgba(233, 176, 60, .8);
+  background: rgba(255, 246, 224, .9);
+  box-shadow: 0 0 0 1px rgba(233, 176, 60, .35);
 }
 
 /* se la come a mordiscos: tres tamaños y desaparece */
