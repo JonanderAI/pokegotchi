@@ -20,6 +20,7 @@ let bannerTimeout = null;
 let walkTimer = null;
 let homeKey = null;
 let petStageEl = null;
+let cameraEl = null;
 let petWrapEl = null;
 let petImgEl = null;
 let petShadowEl = null;
@@ -207,12 +208,18 @@ function spawnTapBurst(x, y) {
   burst.style.left = `${x.toFixed(1)}px`;
   burst.style.top = `${y.toFixed(1)}px`;
 
+  // El grupo entero sale girado al azar y cada rayita se separa un poco de su
+  // sitio exacto: si van siempre en los mismos ángulos, tocar dos veces seguidas
+  // se ve como la misma estampa repetida.
+  const spin = Math.random() * 360;
+
   for (let i = 0; i < TAP_BURST_BARS; i += 1) {
     const bar = document.createElement('i');
-    // cada rayita sale en su ángulo, y las alterna cortas y largas para que el
-    // grupo no parezca una rueda dentada
-    bar.style.setProperty('--angle', `${(i * 360) / TAP_BURST_BARS}deg`);
-    bar.style.setProperty('--reach', i % 2 ? '20px' : '27px');
+    const angle = spin + (i * 360) / TAP_BURST_BARS + (Math.random() - 0.5) * 16;
+    bar.style.setProperty('--angle', `${angle.toFixed(1)}deg`);
+    bar.style.setProperty('--reach', `${(18 + Math.random() * 12).toFixed(1)}px`);
+    bar.style.setProperty('--len', `${(8 + Math.random() * 6).toFixed(1)}px`);
+    bar.style.animationDelay = `${(Math.random() * 70).toFixed(0)}ms`;
     burst.appendChild(bar);
   }
 
@@ -494,6 +501,8 @@ function placeGroundShadow(el, pos) {
 function placePet() {
   if (!petWrapEl || !projection) return;
   placeActor(petWrapEl, projection, petPos, footOffset(petWrapEl));
+  // la cámara va pegada a él: si se recoloca, se reencuadra
+  updateCamera();
 }
 
 // Paseo intermitente a saltos de píxeles (sin transición suave ni giros): a ratos
@@ -596,9 +605,9 @@ function onStageTap(ev) {
   if (!petStageEl || !projection || isNight(_state.pet)) return;
   if (!isBareFloorTap(ev)) return;
 
-  const rect = petStageEl.getBoundingClientRect();
-  const x = ev.clientX - rect.left;
-  const y = ev.clientY - rect.top;
+  const p = stagePoint(ev);
+  const x = p.x;
+  const y = p.y;
   const now = Date.now();
 
   const isDouble = lastStageTap
@@ -727,7 +736,7 @@ function armBerry(berry) {
   el.className = 'berry-item hidden';
   el.src = berry.src;
   el.alt = 'Baya';
-  petStageEl.appendChild(el);
+  cameraEl.appendChild(el);
 
   feeding = {
     berryEl: el,
@@ -749,9 +758,15 @@ function armBerry(berry) {
 }
 
 // Coordenadas del escenario a partir de un evento de puntero.
+// De dónde has tocado en pantalla al punto del escenario SIN el zoom de la
+// cámara: si no se deshace, con la cámara acercada el dedo apuntaría a otro
+// sitio. La caja de la capa de cámara ya viene transformada, así que el factor
+// sale de comparar su ancho con el del escenario.
 function stagePoint(ev) {
-  const rect = feeding.stageEl.getBoundingClientRect();
-  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+  if (!petStageEl) return { x: 0, y: 0 };
+  const rect = (cameraEl || petStageEl).getBoundingClientRect();
+  const k = rect.width ? petStageEl.clientWidth / rect.width : 1;
+  return { x: (ev.clientX - rect.left) * k, y: (ev.clientY - rect.top) * k };
 }
 
 // Deja la baya en el punto del suelo que hay bajo el dedo, dentro de la zona
@@ -863,7 +878,7 @@ function finishEating() {
 function mountWild(state) {
   stopWild();
   if (!petStageEl) return;
-  wild = mountWildPokemon(petStageEl, () => projection, {
+  wild = mountWildPokemon(cameraEl, () => projection, {
     excludeId: state.pet.speciesId,
     // de noche no sale nadie (y los que estén se van)
     // ni de noche ni durante una partida: el minijuego pide la pantalla entera
@@ -1051,6 +1066,48 @@ function cancelPlaydate() {
 // La cámara encuadra la franja por la que anda el Pokémon: el borde delantero
 // del suelo se deja justo encima de la barra de abajo, así su zona queda
 // centrada en pantalla en vez de pegada al borde inferior.
+// --- cámara ------------------------------------------------------------------
+//
+// Cuando pasa algo (una partida, o tu Pokémon jugando con un salvaje) la cámara
+// se acerca y encuadra la acción. El resto del tiempo se queda quieta y entera,
+// que es como se ve mejor el escenario.
+
+const CAM_ZOOM = 1.18;
+const CAM_PAN_LIMIT = 0.13; // como mucho se desplaza este tanto por uno del lienzo
+
+// Adónde mira ahora mismo: null si no hay nada que enfocar. Siempre encuadra al
+// Pokémon, no a lo que esté haciendo: la cámara le sigue a él y le deja en la
+// franja de en medio, que es donde se le ve. Enfocar la baya o el punto entre
+// los dos dejaba al protagonista fuera de sitio.
+function cameraFocus() {
+  if (game) return petPos;
+  if (playdate && playdate.actor) return petPos;
+  return null;
+}
+
+function updateCamera() {
+  if (!cameraEl || !projection || !petStageEl) return;
+
+  const focus = cameraFocus();
+  if (!focus) {
+    cameraEl.style.transform = '';
+    return;
+  }
+
+  const w = petStageEl.clientWidth;
+  const h = petStageEl.clientHeight;
+  const p = projection.project(focus.u, focus.v);
+
+  // Se centra el punto enfocado, pero sin irse tanto como para dejar ver por
+  // dónde acaba el suelo: el desplazamiento va con freno.
+  const maxX = w * CAM_PAN_LIMIT;
+  const maxY = h * CAM_PAN_LIMIT;
+  const tx = Math.max(-maxX, Math.min(maxX, -(p.x - w / 2) * CAM_ZOOM));
+  const ty = Math.max(-maxY, Math.min(maxY, -(p.y - h / 2) * CAM_ZOOM));
+
+  cameraEl.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${CAM_ZOOM})`;
+}
+
 function cameraOptions(stage) {
   const stageTop = stage.getBoundingClientRect().top;
   const navTop = pillnavEl.getBoundingClientRect().top;
@@ -1065,7 +1122,7 @@ function onStageResize() {
 
   const nextFloor = buildFloor(projection);
   if (floorEl) floorEl.replaceWith(nextFloor);
-  else petStageEl.prepend(nextFloor);
+  else if (cameraEl) cameraEl.prepend(nextFloor);
   floorEl = nextFloor;
 
   if (petAnim) petAnim.reflow();
@@ -1109,6 +1166,7 @@ function buildHomeDOM(state) {
   eggImgEl = null;
   floorEl = null;
   petStageEl = null;
+  cameraEl = null;
   petWrapEl = null;
   petImgEl = null;
   petShadowEl = null;
@@ -1151,10 +1209,18 @@ function buildHomeDOM(state) {
   // se inserta ya para poder medirlo: la proyección depende de su tamaño
   viewRoot.appendChild(stage);
 
+  // El escenario recorta y recibe los toques; lo que se mueve al acercar la
+  // cámara es esta capa de dentro, con el suelo y todos los actores. Si moviera
+  // el escenario se movería también su recorte y se verían los bordes.
+  const camera = document.createElement('div');
+  camera.className = 'stage-camera';
+  stage.appendChild(camera);
+  cameraEl = camera;
+
   applyStageMetrics(stage);
   projection = createProjection(stage.clientWidth, stage.clientHeight, cameraOptions(stage));
   floorEl = buildFloor(projection);
-  stage.appendChild(floorEl);
+  camera.appendChild(floorEl);
 
   petPos = { u: 0.5, v: 0.78 };
 
@@ -1207,7 +1273,7 @@ function buildHomeDOM(state) {
   });
 
   stage.addEventListener('pointerdown', onStageTap);
-  stage.appendChild(wrap);
+  camera.appendChild(wrap);
 
   // Los restos también están sobre el suelo, así que los de atrás se ven más
   // pequeños y quedan tapados por quien pase por delante.
@@ -1220,7 +1286,7 @@ function buildHomeDOM(state) {
       render(_state);
       _deps.saveState(_state);
     });
-    stage.appendChild(item);
+    camera.appendChild(item);
     placeProp(item, projection, slot, propSize);
     return item;
   });
@@ -1230,7 +1296,7 @@ function buildHomeDOM(state) {
   ['far', 'near'].forEach((zone) => {
     const layer = document.createElement('div');
     layer.className = `tilt-shift ${zone}`;
-    stage.appendChild(layer);
+    camera.appendChild(layer);
   });
 
   petStageEl = stage;
@@ -1393,6 +1459,7 @@ function updateHomeDynamic(state) {
   // nosotros y no el GIF.
   if (petAnim) petAnim.setSpeed(0.6 + mood(pet) * 0.7);
 
+  updateCamera();
   renderBubbles(state);
 
   if (zEl) zEl.classList.toggle('hidden', !night);
@@ -1554,8 +1621,8 @@ function startMinigame() {
 
 function onGamePoint(ev) {
   if (!game || ev.buttons === 0 && ev.type === 'pointermove') return;
-  const rect = petStageEl.getBoundingClientRect();
-  const { u } = projection.unproject(ev.clientX - rect.left, ev.clientY - rect.top);
+  const p = stagePoint(ev);
+  const { u } = projection.unproject(p.x, p.y);
   const limits = petULimits(petPos.v);
   game.targetU = Math.min(limits.max, Math.max(limits.min, u));
 }
@@ -1581,7 +1648,7 @@ function gameDrop() {
   el.className = 'berry-item falling';
   el.src = berry.src;
   el.alt = '';
-  petStageEl.appendChild(el);
+  cameraEl.appendChild(el);
 
   const limits = petULimits(petPos.v);
   const pos = {
@@ -1595,7 +1662,7 @@ function gameDrop() {
   const shadow = document.createElement('div');
   shadow.className = 'berry-shadow';
   placeGroundShadow(shadow, pos);
-  petStageEl.appendChild(shadow);
+  cameraEl.appendChild(shadow);
   shadow.animate(
     [
       { opacity: .06, transform: 'translate(-50%, -50%) scale(.35)' },

@@ -262,6 +262,21 @@ html, body {
 }
 #view-root > .pet-stage { pointer-events: auto; }
 
+/* Capa de cámara: dentro va el suelo y todos los actores, y es lo que se mueve
+   y se acerca cuando hay algo que enfocar. El recorte se queda en .pet-stage,
+   porque mover el recorte junto al contenido dejaría ver los bordes. */
+.stage-camera {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transition: transform .55s cubic-bezier(.25, .8, .3, 1);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-camera { transition: none; }
+}
+
 /* la interfaz va por encima del mundo */
 #info-card, #statbar { position: relative; z-index: 2; }
 
@@ -921,38 +936,18 @@ html, body {
   z-index: 9;
 }
 
-.tap-burst::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px;
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: tap-ring .6s cubic-bezier(.2, .8, .3, 1) forwards;
-}
-
 .tap-burst i {
   position: absolute;
   left: 0;
   top: 0;
   width: 3px;
-  height: 10px;
-  margin: -5px -1.5px;
+  height: var(--len, 10px);
+  margin: calc(var(--len, 10px) / -2) -1.5px;
   border-radius: 999px;
   background: linear-gradient(180deg, #7fd0ff, var(--accent));
   opacity: 0;
   animation: tap-bar .6s cubic-bezier(.2, .8, .3, 1) forwards;
 }
-.tap-burst i:nth-child(even) { animation-delay: .05s; }
-
-@keyframes tap-ring {
-  0%   { transform: scale(.3); opacity: .8; }
-  100% { transform: scale(2.6); opacity: 0; }
-}
-
 @keyframes tap-bar {
   0% {
     transform: rotate(var(--angle, 0deg)) translateY(-5px) scaleY(.35);

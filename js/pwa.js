@@ -20,6 +20,9 @@ const GRADIENT_TOP = '#7fd0ff';
 const GRADIENT_BOTTOM = '#2a75bb';
 const FILL_ANY = 0.68;
 const FILL_MASKABLE = 0.52;
+// El favicon va sin fondo, así que el bicho puede ocupar casi todo el lienzo:
+// no hay chapa de la que separarse.
+const FILL_BARE = 0.92;
 
 const STATIC_ICONS = [
   { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -74,8 +77,12 @@ function contentBox(img) {
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
-async function drawIcon(src, size, fill) {
-  const key = `${src}|${size}|${fill}`;
+// `background` es lo que separa el icono de la app (chapa con degradado, que es
+// lo que quiere Android para la pantalla de inicio) del favicon de la pestaña,
+// que va suelto: ahí una chapa de color canta, y el fondo de la pestaña lo pone
+// el navegador.
+async function drawIcon(src, size, fill, { background = true } = {}) {
+  const key = `${src}|${size}|${fill}|${background}`;
   const hit = iconCache.get(key);
   if (hit) return hit;
 
@@ -87,11 +94,13 @@ async function drawIcon(src, size, fill) {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
 
-  const grad = ctx.createLinearGradient(0, 0, 0, size);
-  grad.addColorStop(0, GRADIENT_TOP);
-  grad.addColorStop(1, GRADIENT_BOTTOM);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
+  if (background) {
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, GRADIENT_TOP);
+    grad.addColorStop(1, GRADIENT_BOTTOM);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+  }
 
   // Escala entera y sin suavizado: es pixel art, cualquier interpolación le
   // emborrona el contorno.
@@ -139,10 +148,11 @@ function setLink(rel, href, extra = {}) {
 // data URL. Si el navegador no se los traga, detrás van los ficheros estáticos
 // de icons/, así que la app se sigue pudiendo instalar igual.
 async function refreshManifest(state) {
-  const [any192, any512, maskable] = await Promise.all([
+  const [any192, any512, maskable, bare] = await Promise.all([
     drawIcon(spriteIconFor(state.pet), 192, FILL_ANY),
     drawIcon(spriteIconFor(state.pet), 512, FILL_ANY),
     drawIcon(spriteIconFor(state.pet), 512, FILL_MASKABLE),
+    drawIcon(spriteIconFor(state.pet), 192, FILL_BARE, { background: false }),
   ]);
 
   const base = await fetch(abs('manifest.webmanifest')).then((r) => r.json());
@@ -168,8 +178,9 @@ async function refreshManifest(state) {
   manifestBlobUrl = next;
 
   // La pestaña y el "añadir a pantalla de inicio" de iOS, que no miran el
-  // manifiesto.
-  setLink('icon', any192, { type: 'image/png' });
+  // manifiesto. El favicon va sin fondo; el de iOS no, porque ahí lo que quede
+  // transparente lo rellena el sistema con negro.
+  setLink('icon', bare, { type: 'image/png' });
   setLink('apple-touch-icon', any192);
 }
 
