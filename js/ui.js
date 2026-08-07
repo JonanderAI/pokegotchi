@@ -1,7 +1,7 @@
 import { resolveSprite, iconFor, randomBerries, berryNamed, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
 import { animateSprite } from './sprite-anim.js';
-import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U, STEP_V } from './world.js';
+import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, quantizeScale, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
@@ -97,6 +97,7 @@ function pauseSpriteAnimation() {
   if (petAnim) petAnim.rest();
 }
 
+const screenEl = document.getElementById('screen');
 const viewRoot = document.getElementById('view-root');
 const bannerEl = document.getElementById('banner');
 const pillnavEl = document.getElementById('pillnav');
@@ -164,6 +165,13 @@ export function initUI(state, deps) {
 
   window.addEventListener('resize', onStageResize);
 
+  // Un guiño a cada toque, en cualquier parte: unas rayitas azules que salen del
+  // dedo y se apagan. No hace nada, pero la pantalla deja de sentirse muerta.
+  screenEl.addEventListener('pointerdown', (ev) => {
+    const rect = screenEl.getBoundingClientRect();
+    spawnTapBurst(ev.clientX - rect.left, ev.clientY - rect.top);
+  });
+
   scrimEl.addEventListener('pointerdown', closeSheets);
 
   nameFormEl.addEventListener('submit', (ev) => {
@@ -189,6 +197,27 @@ export function initUI(state, deps) {
       render(_state);
     });
   });
+}
+
+const TAP_BURST_BARS = 8;
+
+function spawnTapBurst(x, y) {
+  const burst = document.createElement('div');
+  burst.className = 'tap-burst';
+  burst.style.left = `${x.toFixed(1)}px`;
+  burst.style.top = `${y.toFixed(1)}px`;
+
+  for (let i = 0; i < TAP_BURST_BARS; i += 1) {
+    const bar = document.createElement('i');
+    // cada rayita sale en su ángulo, y las alterna cortas y largas para que el
+    // grupo no parezca una rueda dentada
+    bar.style.setProperty('--angle', `${(i * 360) / TAP_BURST_BARS}deg`);
+    bar.style.setProperty('--reach', i % 2 ? '20px' : '27px');
+    burst.appendChild(bar);
+  }
+
+  screenEl.appendChild(burst);
+  setTimeout(() => burst.remove(), 700);
 }
 
 // --- paneles flotantes ------------------------------------------------------
@@ -451,6 +480,17 @@ const STEP_MS = 500;
 
 // Recoloca a la mascota en el suelo según su posición en el mundo. Se llama en
 // cada paso y cada vez que cambia el tamaño del escenario.
+// Una sombra plana sobre el suelo, centrada en el punto (no apoyada como los
+// props, que se colocan por su base).
+function placeGroundShadow(el, pos) {
+  if (!projection) return;
+  const p = projection.project(pos.u, pos.v);
+  el.style.setProperty('--depth-scale', quantizeScale(p.scale).toFixed(3));
+  el.style.left = `${p.x.toFixed(1)}px`;
+  el.style.top = `${p.y.toFixed(1)}px`;
+  el.style.zIndex = String(projection.layerFor(pos.v) - 1);
+}
+
 function placePet() {
   if (!petWrapEl || !projection) return;
   placeActor(petWrapEl, projection, petPos, footOffset(petWrapEl));
@@ -826,7 +866,8 @@ function mountWild(state) {
   wild = mountWildPokemon(petStageEl, () => projection, {
     excludeId: state.pet.speciesId,
     // de noche no sale nadie (y los que estén se van)
-    isPaused: () => !petStageEl || isNight(_state.pet),
+    // ni de noche ni durante una partida: el minijuego pide la pantalla entera
+    isPaused: () => !petStageEl || isNight(_state.pet) || !!game,
     onTap: onWildTap,
   });
 }
@@ -1549,6 +1590,20 @@ function gameDrop() {
   };
   placeProp(el, projection, pos, propSize);
 
+  // La sombra marca dónde va a caer: crece y se oscurece a la vez que la baya
+  // baja, que es lo que deja ver a qué altura viene.
+  const shadow = document.createElement('div');
+  shadow.className = 'berry-shadow';
+  placeGroundShadow(shadow, pos);
+  petStageEl.appendChild(shadow);
+  shadow.animate(
+    [
+      { opacity: .06, transform: 'translate(-50%, -50%) scale(.35)' },
+      { opacity: .38, transform: 'translate(-50%, -50%) scale(1)' },
+    ],
+    { duration: GAME_FALL_MS, easing: 'cubic-bezier(.5,0,1,.5)', fill: 'forwards' },
+  );
+
   const scale = el.style.getPropertyValue('--depth-scale') || 1;
   const anim = el.animate(
     [
@@ -1558,7 +1613,7 @@ function gameDrop() {
     { duration: GAME_FALL_MS, easing: 'cubic-bezier(.5,0,1,.5)' },
   );
 
-  const item = { el, pos, anim };
+  const item = { el, shadow, anim, pos };
   game.berries.push(item);
   anim.onfinish = () => resolveBerry(item);
 
@@ -1570,6 +1625,8 @@ function resolveBerry(item) {
   if (!game) return;
   const i = game.berries.indexOf(item);
   if (i >= 0) game.berries.splice(i, 1);
+
+  if (item.shadow) item.shadow.remove();
 
   const cogida = Math.abs(item.pos.u - petPos.u) <= GAME_CATCH_U;
   if (cogida) {
@@ -1612,6 +1669,7 @@ function stopMinigame() {
     b.anim.onfinish = null;
     b.anim.cancel();
     b.el.remove();
+    if (b.shadow) b.shadow.remove();
   });
   game = null;
   if (petStageEl) {

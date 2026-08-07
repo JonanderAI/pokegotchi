@@ -895,6 +895,79 @@ html, body {
 
 /* minijuego: las bayas que caen del cielo */
 .berry-item.falling { z-index: 4; }
+
+/* La sombra de la baya en el suelo: crece y se oscurece según baja, que es lo
+   que deja ver a qué altura viene y dónde va a caer. */
+.berry-shadow {
+  position: absolute;
+  width: calc(var(--prop-size, 40px) * var(--depth-scale, 1) * 1.05);
+  height: calc(var(--prop-size, 40px) * var(--depth-scale, 1) * .38);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(20, 24, 40, .5) 0%,
+    rgba(20, 24, 40, .32) 55%,
+    rgba(20, 24, 40, 0) 72%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* Guiño a cada toque: unas rayitas azules que salen del dedo y se apagan. Salen
+   escalonadas y alternando largo, para que sea un destello y no una rueda. */
+.tap-burst {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 9;
+}
+
+.tap-burst::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: tap-ring .6s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+
+.tap-burst i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 10px;
+  margin: -5px -1.5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7fd0ff, var(--accent));
+  opacity: 0;
+  animation: tap-bar .6s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+.tap-burst i:nth-child(even) { animation-delay: .05s; }
+
+@keyframes tap-ring {
+  0%   { transform: scale(.3); opacity: .8; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes tap-bar {
+  0% {
+    transform: rotate(var(--angle, 0deg)) translateY(-5px) scaleY(.35);
+    opacity: 0;
+  }
+  30% { opacity: .95; }
+  100% {
+    transform: rotate(var(--angle, 0deg)) translateY(calc(var(--reach, 24px) * -1)) scaleY(1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tap-burst { display: none; }
+}
 @keyframes berry-missed {
   0% { opacity: 1; transform: scale(var(--depth-scale, 1)); }
   100% { opacity: 0; transform: scale(calc(var(--depth-scale, 1) * .7)) translateY(6px); }
