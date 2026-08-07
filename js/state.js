@@ -32,7 +32,31 @@ export const TIMING = {
   sicknessCheckChance: 0.05,
 };
 
-export const XP_PER_LEVEL = 40;
+// Subir de nivel cuesta cada vez más. Antes eran 40 de experiencia fijos por
+// nivel, lo que hacía que los primeros se atragantaran y los últimos cayeran
+// solos: los primeros son el enganche y tienen que ir rápido, y a partir de ahí
+// cada uno tiene que costar un poco más que el anterior.
+const XP_BASE = 20;   // lo que cuesta el primer nivel de la etapa
+const XP_CURVE = .75; // cuánto se empina la cuesta
+
+// Lo que cuesta pasar al nivel n de la etapa (n = 1 es el primero).
+export function xpForLevel(n) {
+  return Math.round(XP_BASE * Math.pow(n, XP_CURVE));
+}
+
+// De la experiencia acumulada en la etapa a: cuántos niveles lleva, cuánto tiene
+// del nivel en curso y cuánto pide ese nivel. La barra sale de los dos últimos.
+export function levelFromXp(xp) {
+  let level = 0;
+  let rest = Math.max(0, xp);
+  for (let guard = 0; guard < 999; guard += 1) {
+    const cost = xpForLevel(level + 1);
+    if (rest < cost) return { level, into: rest, need: cost };
+    rest -= cost;
+    level += 1;
+  }
+  return { level, into: 0, need: xpForLevel(level + 1) };
+}
 // Se gana algo solo con el paso del tiempo, pero poco: la experiencia de verdad
 // sale de hacerle caso (ver los valores de cada cuidado en care.js). Antes un
 // nivel eran 4 horas de reloj y las interacciones daban migajas, asi que subir

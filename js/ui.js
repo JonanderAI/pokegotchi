@@ -6,7 +6,7 @@ import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
 import { isNight, eggProgress, mood, currentNeeds } from './care.js';
-import { XP_PER_LEVEL } from './state.js';
+import { levelFromXp } from './state.js';
 
 let _state = null;
 let _deps = null;
@@ -119,11 +119,12 @@ const MORE_TABS = ['pokedex', 'settings', 'info'];
 
 function levelFor(pet) {
   const base = STAGE_LEVEL_BASE[pet.phase] || 1;
-  return base + Math.floor(pet.xp / XP_PER_LEVEL);
+  return base + levelFromXp(pet.xp).level;
 }
 
 function xpProgress(pet) {
-  return (pet.xp % XP_PER_LEVEL) / XP_PER_LEVEL;
+  const { into, need } = levelFromXp(pet.xp);
+  return need > 0 ? into / need : 0;
 }
 
 function statusText(pet) {
@@ -348,24 +349,42 @@ function renderInfoCard(state) {
   const pet = state.pet;
   const hide = pet.phase === 'oak';
   infoCardEl.style.display = hide ? 'none' : 'flex';
-  infoXpEl.style.display = hide ? 'none' : 'block';
   if (hide) return;
 
   if (pet.phase === 'egg') {
     infoIconEl.src = EGG_ICON;
     infoNameEl.textContent = '???';
     infoStageEl.textContent = 'Huevo';
-    infoLevelEl.innerHTML = '';
-    infoXpEl.querySelector('i').style.width = '0%';
+    infoLevelEl.textContent = '';
+    infoLevelEl.classList.add('hidden');
+    setXpRing(0);
     return;
   }
+  infoLevelEl.classList.remove('hidden');
   const info = getEntry(state, pet.speciesId);
   infoIconEl.src = iconFor(pet.speciesId);
   // manda el mote; si no le has puesto ninguno, el nombre de su especie
   infoNameEl.textContent = pet.nickname || (info ? info.name : '???');
   infoStageEl.textContent = statusText(pet);
-  infoLevelEl.innerHTML = `<span class="nvl-label">Nvl.</span> ${levelFor(pet)}`;
-  infoXpEl.querySelector('i').style.width = `${Math.round(xpProgress(pet) * 100)}%`;
+  infoLevelEl.textContent = levelFor(pet);
+  setXpRing(xpProgress(pet));
+}
+
+// El trazo del borde se recorta con dasharray: se deja al descubierto la parte
+// que toca y se esconde el resto. La longitud se mide del propio rectángulo, que
+// es quien sabe cuánto mide su perímetro con las esquinas redondeadas.
+let xpRingLength = 0;
+
+function setXpRing(progress) {
+  const fill = infoXpEl.querySelector('.xp-fill');
+  if (!fill) return;
+  if (!xpRingLength) {
+    xpRingLength = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
+    if (!xpRingLength) return;
+    fill.style.strokeDasharray = xpRingLength;
+  }
+  const p = Math.max(0, Math.min(1, progress));
+  fill.style.strokeDashoffset = xpRingLength * (1 - p);
 }
 
 function renderStatbar(state) {

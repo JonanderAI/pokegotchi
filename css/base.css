@@ -93,70 +93,92 @@ html, body {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  border-bottom: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   box-shadow: var(--glass-shadow);
   flex-shrink: 0;
   cursor: pointer;
 }
+
+/* con los estados desplegados, la tarjeta se abre por abajo para que las dos
+   sean una sola pieza */
+#screen:has(#statbar.expanded) #info-card {
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+}
 #info-icon-box {
-  width: 40px;
-  height: 40px;
+  position: relative;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, .5);
   box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 3px rgba(20, 24, 40, .08);
-  border-radius: 10px;
+  border-radius: 12px;
   flex-shrink: 0;
+  /* la chapa del nivel asoma por fuera del cuadro */
+  overflow: visible;
 }
+
+/* La experiencia es el borde del cuadro del icono: el trazo se va cerrando
+   alrededor conforme sube. Una barra suelta pedía sitio propio y arrastraba el
+   redondeo de la tarjeta; esto no ocupa nada. */
+#info-xp {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+#info-xp rect {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.xp-track { stroke: rgba(20, 24, 40, .12); }
+.xp-fill {
+  stroke: var(--accent);
+  /* empieza arriba y va en el sentido de las agujas del reloj */
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset .35s ease;
+}
+
 #info-icon {
   width: 30px;
   height: 30px;
   object-fit: contain;
   image-rendering: pixelated;
 }
+
+/* el nivel, flotando en la esquina de abajo a la izquierda del cuadro */
+#info-level {
+  position: absolute;
+  left: -6px;
+  bottom: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+  box-shadow: 0 2px 6px -1px rgba(20, 24, 40, .35), 0 0 0 2px rgba(255, 255, 255, .85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-fill { transition: none; }
+}
+
 #info-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 #info-name { margin: 0; font-size: 13px; font-weight: bold; }
 #info-stage { margin: 0; font-size: 10px; opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#info-level {
-  margin: 0;
-  font-size: 13px;
-  font-weight: bold;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-#info-level .nvl-label { font-size: 9px; font-weight: normal; }
-
-/* barra de exp pegada justo debajo, como una balda de la misma tarjeta */
-#info-xp {
-  margin: 0 14px;
-  /* Los 16px de abajo tienen que ser los mismos 16px de arriba de la tarjeta, y
-     el radio no puede pasar del alto de la caja: con la barra a 6px el navegador
-     lo aplastaba y las esquinas salían ovaladas. Así que la balda mide lo que
-     necesita el redondeo y la barra de progreso va metida dentro. */
-  height: 16px;
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, .38);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-top: none;
-  border-radius: 0 0 16px 16px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-#info-xp i {
-  display: block;
-  height: 5px;
-  width: 0%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), #7fd0ff);
-  transition: width .3s ease;
-}
-
 /* estados: filas con icono + puntos; se despliegan al tocar la tarjeta de arriba */
 #statbar {
   display: flex;
@@ -186,12 +208,6 @@ html, body {
   border-bottom-width: 1px;
 }
 
-/* Desplegado, los estados son la balda de abajo de la misma tarjeta: la barra
-   de exp pierde el redondeo y el filo para que no quede una junta en medio. */
-#screen:has(#statbar.expanded) #info-xp {
-  border-radius: 0;
-  border-bottom: none;
-}
 .stat-row {
   display: flex;
   align-items: center;

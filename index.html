@@ -31,14 +31,21 @@
 
   <div id="screen">
     <div id="info-card">
-      <div id="info-icon-box"><img id="info-icon" alt="" /></div>
+      <div id="info-icon-box">
+        <!-- La experiencia es el propio borde del cuadro, que se va cerrando: un
+             trazo sobre el perímetro redondeado, recortado con dasharray. -->
+        <svg id="info-xp" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect class="xp-track" x="2" y="2" width="40" height="40" rx="12" />
+          <rect class="xp-fill" x="2" y="2" width="40" height="40" rx="12" />
+        </svg>
+        <img id="info-icon" alt="" />
+        <span id="info-level"></span>
+      </div>
       <div id="info-text">
         <p id="info-name">???</p>
         <p id="info-stage"></p>
       </div>
-      <p id="info-level"></p>
     </div>
-    <div id="info-xp"><i></i></div>
 
     <div id="statbar">
       <div class="stat-row" data-stat="hunger"><img alt="" /><span class="stat-name">Hambre</span><span class="stat-meter"><i></i></span></div>
