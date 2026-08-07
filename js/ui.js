@@ -1,4 +1,4 @@
-import { resolveSprite, iconFor, randomBerry, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
+import { resolveSprite, iconFor, randomBerries, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset } from './sprite-shadow.js';
 import { animateSprite } from './sprite-anim.js';
 import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U, STEP_V } from './world.js';
@@ -38,6 +38,7 @@ let floorEl = null;
 let petPos = { u: 0.5, v: 0.78 };
 let wild = null;
 let lastWildTapAt = 0;
+let playdate = null;
 let eggImgEl = null;
 let pendingIntro = null; // 'hatch' | 'evolve'
 
@@ -99,6 +100,7 @@ const pillnavEl = document.getElementById('pillnav');
 const morePanelEl = document.getElementById('more-panel');
 const bagPanelEl = document.getElementById('bag-panel');
 const scrimEl = document.getElementById('sheet-scrim');
+const berryPanelEl = document.getElementById('berry-panel');
 const statbarEl = document.getElementById('statbar');
 const infoCardEl = document.getElementById('info-card');
 const infoIconEl = document.getElementById('info-icon');
@@ -169,8 +171,10 @@ export function initUI(state, deps) {
 
 // --- paneles flotantes ------------------------------------------------------
 
+const SHEETS = { bag: bagPanelEl, more: morePanelEl, berry: berryPanelEl };
+
 function sheetFor(name) {
-  return name === 'bag' ? bagPanelEl : morePanelEl;
+  return SHEETS[name];
 }
 
 function toggleSheet(name) {
@@ -189,9 +193,17 @@ function toggleSheet(name) {
 
 function closeSheets() {
   openSheet = null;
-  bagPanelEl.classList.add('hidden');
-  morePanelEl.classList.add('hidden');
+  Object.values(SHEETS).forEach((el) => el.classList.add('hidden'));
   scrimEl.classList.add('hidden');
+  renderPillnav();
+}
+
+// La bandeja de bayas no es una pestaña de la barra: se abre desde la Mochila.
+function openSheetNamed(name) {
+  closeSheets();
+  openSheet = name;
+  sheetFor(name).classList.remove('hidden');
+  scrimEl.classList.remove('hidden');
   renderPillnav();
 }
 
@@ -362,7 +374,7 @@ function placePet() {
 // quieto, a ratos da una tanda corta de pasos, como un Tamagotchi real.
 function scheduleWalk() {
   stopWalkTimer();
-  if (!petStageEl || !petWrapEl || feeding || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || isNight(_state.pet)) return;
 
   const willWalk = Math.random() < 0.55;
   if (willWalk) {
@@ -373,7 +385,7 @@ function scheduleWalk() {
 }
 
 function walkBurst(stepsLeft) {
-  if (!petStageEl || !petWrapEl || feeding || isNight(_state.pet)) return;
+  if (!petStageEl || !petWrapEl || feeding || playdate || isNight(_state.pet)) return;
   if (stepsLeft <= 0) {
     walkTimer = setTimeout(scheduleWalk, 1200 + Math.random() * 2200);
     return;
@@ -446,33 +458,52 @@ function cancelFeeding() {
 }
 
 function startFeeding() {
+  cancelPlaydate();
   goHome();
   render(_state); // si venimos de la mochila, monta la vista del Pokémon
   cancelFeeding();
   if (!petStageEl) return;
 
-  const berry = randomBerry();
+  // Primero se elige la baya (cada vez salen otras, como si rebuscaras en la
+  // mochila) y luego se lanza tocando el suelo.
+  const grid = berryPanelEl.querySelector('.berry-grid');
+  grid.innerHTML = '';
+  randomBerries(6).forEach((berry) => {
+    const btn = document.createElement('button');
+    btn.className = 'berry-choice';
+    const img = document.createElement('img');
+    img.src = berry.src;
+    img.alt = berry.name;
+    btn.appendChild(img);
+    btn.addEventListener('click', () => armBerry(berry));
+    grid.appendChild(btn);
+  });
+  openSheetNamed('berry');
+}
+
+// Baya elegida: queda "en la mano" hasta que se toca un punto del suelo.
+function armBerry(berry) {
+  closeSheets();
+  if (!petStageEl) return;
+
   const el = document.createElement('img');
-  el.className = 'berry-item grabbable waiting';
+  el.className = 'berry-item hidden';
   el.src = berry.src;
   el.alt = 'Baya';
-  el.addEventListener('pointerdown', onBerryGrab);
   petStageEl.appendChild(el);
 
   feeding = {
     berryEl: el,
     stageEl: petStageEl,
-    phase: 'drag',
-    pos: { u: 0.5, v: 0.86 }, // empieza en primer plano, a mano y despejada
+    phase: 'aiming',
+    pos: { u: 0.5, v: 0.8 },
     timer: null,
     steps: 0,
   };
-  placeProp(el, projection, feeding.pos, propSize);
-  stopWalkTimer();
-  // mientras se coloca la baya, los salvajes no roban el toque
+
   petStageEl.classList.add('placing-food');
   petStageEl.addEventListener('pointerdown', onStagePlace);
-  showBanner('Arrastra la baya donde quieras: irá a buscarla.', { sticky: true });
+  showBanner('Toca el suelo donde quieras lanzarla.', { sticky: true });
 }
 
 // Coordenadas del escenario a partir de un evento de puntero.
@@ -491,43 +522,33 @@ function placeBerry(x, y) {
   placeProp(feeding.berryEl, projection, feeding.pos, propSize);
 }
 
-function onBerryGrab(ev) {
-  if (!feeding || feeding.phase !== 'drag') return;
-  ev.preventDefault();
-  ev.stopPropagation();
+// La baya cae desde arriba y bota un par de veces antes de quedarse quieta.
+// El transform lleva dentro la escala de profundidad, que si no se perdería.
+function throwBerry() {
   const el = feeding.berryEl;
-  el.classList.remove('waiting');
-  el.classList.add('grabbed');
-  el.setPointerCapture(ev.pointerId);
-  el.addEventListener('pointermove', onBerryMove);
-  el.addEventListener('pointerup', onBerryDrop);
-  el.addEventListener('pointercancel', onBerryDrop);
+  const scale = el.style.getPropertyValue('--depth-scale') || 1;
+  const fall = `scale(${scale})`;
+  el.classList.remove('hidden');
+  el.animate(
+    [
+      { transform: `translateY(-260px) ${fall}`, opacity: 0, offset: 0 },
+      { transform: `translateY(-240px) ${fall}`, opacity: 1, offset: 0.05 },
+      { transform: `translateY(0) ${fall}`, offset: 0.55 },
+      { transform: `translateY(-38px) ${fall}`, offset: 0.72 },
+      { transform: `translateY(0) ${fall}`, offset: 0.85 },
+      { transform: `translateY(-12px) ${fall}`, offset: 0.93 },
+      { transform: `translateY(0) ${fall}`, offset: 1 },
+    ],
+    { duration: 750, easing: 'linear' },
+  );
 }
 
-function onBerryMove(ev) {
-  if (!feeding || feeding.phase !== 'drag') return;
-  const p = stagePoint(ev);
-  placeBerry(p.x, p.y);
-}
-
-function onBerryDrop(ev) {
-  if (!feeding || feeding.phase !== 'drag') return;
-  const el = feeding.berryEl;
-  el.removeEventListener('pointermove', onBerryMove);
-  el.removeEventListener('pointerup', onBerryDrop);
-  el.removeEventListener('pointercancel', onBerryDrop);
-  el.classList.remove('grabbed', 'grabbable');
-  dropBerry();
-}
-
-// Tocar el escenario también vale para soltar ahí la baya (más cómodo que
-// arrastrar en pantallas pequeñas).
+// Se lanza donde toques: cae del cielo a ese punto del suelo.
 function onStagePlace(ev) {
-  if (!feeding || feeding.phase !== 'drag') return;
-  if (ev.target === feeding.berryEl) return;
+  if (!feeding || feeding.phase !== 'aiming') return;
   const p = stagePoint(ev);
   placeBerry(p.x, p.y);
-  feeding.berryEl.classList.remove('waiting', 'grabbable');
+  throwBerry();
   dropBerry();
 }
 
@@ -605,28 +626,140 @@ function stopWild() {
   wild = null;
 }
 
-// Tocar a un salvaje: se saluda, la mascota se anima un poco y, si hay red, la
-// especie queda registrada como vista en la Pokédex.
-async function onWildTap(actor) {
+// Tocar a un salvaje manda a tu Pokémon a jugar con él: va andando hasta
+// donde está, saltan juntos un rato y se lleva experiencia y felicidad. Es la
+// interacción que más da, porque hay que pillarlo mientras anda por ahí.
+const PLAY_REACH_U = 0.09;
+const PLAY_REACH_V = 0.09;
+const PLAY_HOPS = 5;
+const PLAY_HOP_MS = 340;
+const MAX_PLAY_STEPS = 40;
+
+function onWildTap(actor) {
   const now = Date.now();
-  if (now - lastWildTapAt < 1500) return;
+  if (now - lastWildTapAt < 1200) return;
   lastWildTapAt = now;
 
-  _state.pet.happiness = Math.min(100, _state.pet.happiness + 2);
-  renderStatbar(_state);
+  nameOf(actor.speciesId).then((name) => {
+    if (playdate && playdate.actor === actor) {
+      showBanner(name ? `¡Vais a jugar con ${name}!` : '¡Vais a jugar juntos!');
+    }
+  });
 
-  const known = getEntry(_state, actor.speciesId);
-  if (known) {
-    showBanner(`¡Un ${known.name} salvaje te saluda!`);
+  // si está durmiendo, comiendo o ya jugando, solo saluda
+  if (playdate || feeding || isNight(_state.pet) || !petWrapEl) {
+    _state.pet.happiness = Math.min(100, _state.pet.happiness + 2);
+    renderStatbar(_state);
     return;
   }
 
-  showBanner('¡Un Pokémon salvaje te saluda!');
-  const info = await getSpeciesInfo(actor.speciesId);
-  if (!info) return;
-  registerSeen(_state, actor.speciesId, info);
+  // Se para a su lado, no encima: se acerca por el lado del que viene y un
+  // poco por delante, para que se vean los dos.
+  const side = petPos.u <= actor.pos.u ? -1 : 1;
+  const limits = petULimits(Math.min(PET_MAX_V, actor.pos.v + 0.06));
+  playdate = {
+    actor,
+    target: {
+      u: Math.min(limits.max, Math.max(limits.min, actor.pos.u + side * 0.13)),
+      v: Math.min(PET_MAX_V, Math.max(PET_MIN_V, actor.pos.v + 0.06)),
+    },
+    steps: 0,
+    hops: 0,
+    timer: null,
+  };
+  actor.busy = true;
+  stopWalkTimer();
+  walkToPlaymate();
+}
+
+// El nombre solo se sabe si hay red; de paso queda registrado en la Pokédex.
+async function nameOf(speciesId) {
+  const known = getEntry(_state, speciesId);
+  if (known) return known.name;
+  const info = await getSpeciesInfo(speciesId);
+  if (!info) return null;
+  registerSeen(_state, speciesId, info);
   _deps.saveState(_state);
-  showBanner(`¡Un ${info.name} salvaje te saluda!`);
+  return info.name;
+}
+
+function walkToPlaymate() {
+  if (!playdate || !petWrapEl) return;
+  const du = playdate.target.u - petPos.u;
+  const dv = playdate.target.v - petPos.v;
+
+  const llegado = Math.abs(du) <= PLAY_REACH_U && Math.abs(dv) <= PLAY_REACH_V;
+  if (llegado || playdate.steps >= MAX_PLAY_STEPS) {
+    startPlaydate();
+    return;
+  }
+  playdate.steps += 1;
+
+  if (Math.abs(du) > 0.01) faceTo(du < 0 ? -1 : 1);
+  petPos.u += Math.max(-STEP_U, Math.min(STEP_U, du));
+  petPos.v += Math.max(-STEP_V, Math.min(STEP_V, dv));
+  placePet();
+  hopOnce();
+
+  playdate.timer = setTimeout(walkToPlaymate, STEP_MS);
+}
+
+// Ya juntos: saltan a la vez, salen corazones y se reparte el premio.
+function startPlaydate() {
+  if (!playdate) return;
+  const { actor } = playdate;
+
+  // se miran el uno al otro
+  const dir = actor.pos.u < petPos.u ? -1 : 1;
+  faceTo(dir);
+  actor.faceTo?.(-dir);
+
+  const bounce = () => {
+    if (!playdate) return;
+    hopOnce();
+    actor.cheer?.();
+    spawnHeart();
+    playdate.hops += 1;
+    if (playdate.hops >= PLAY_HOPS) {
+      finishPlaydate();
+      return;
+    }
+    playdate.timer = setTimeout(bounce, PLAY_HOP_MS);
+  };
+  bounce();
+}
+
+function spawnHeart() {
+  if (!petWrapEl) return;
+  const heart = document.createElement('img');
+  heart.className = 'play-heart';
+  heart.src = ITEM_ICONS.happiness;
+  heart.style.setProperty('--drift', `${Math.round((Math.random() - 0.5) * 40)}px`);
+  petWrapEl.appendChild(heart);
+  setTimeout(() => heart.remove(), 900);
+}
+
+function finishPlaydate() {
+  if (!playdate) return;
+  const { actor, timer } = playdate;
+  clearTimeout(timer);
+  playdate = null;
+
+  actor.busy = false;
+  actor.leaving = true; // se despide y sigue su camino
+
+  const { woke } = _deps.care.playWithWild(_state);
+  showBanner(woke ? '¡Le has despertado, pero se lo ha pasado bien!' : '¡Qué bien lo habéis pasado juntos!');
+  render(_state);
+  _deps.saveState(_state);
+  scheduleWalk();
+}
+
+function cancelPlaydate() {
+  if (!playdate) return;
+  clearTimeout(playdate.timer);
+  playdate.actor.busy = false;
+  playdate = null;
 }
 
 // El escenario cambia de tamaño al girar el móvil: se recalcula la proyección
@@ -661,6 +794,7 @@ function onStageResize() {
 function leaveHome() {
   if (homeKey === null) return;
   homeKey = null;
+  cancelPlaydate();
   cancelFeeding();
   stopWild();
   stopWalkTimer();
@@ -681,6 +815,7 @@ function renderHome(state) {
 }
 
 function buildHomeDOM(state) {
+  cancelPlaydate();
   cancelFeeding();
   stopWild();
   viewRoot.innerHTML = '';

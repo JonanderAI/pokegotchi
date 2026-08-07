@@ -38,12 +38,18 @@ const BERRIES = [
   'starf', 'tamato', 'tanga', 'wacan', 'watmel', 'wepear', 'wiki', 'yache',
 ];
 
-export function randomBerry() {
-  const name = BERRIES[Math.floor(Math.random() * BERRIES.length)];
-  return {
-    name,
-    src: `${BASE}/items/items/berries/${name}-berry.png`,
-  };
+function berry(name) {
+  return { name, src: `${BASE}/items/items/berries/${name}-berry.png` };
+}
+
+// Un puñado de bayas distintas para elegir, como si rebuscaras en la mochila.
+export function randomBerries(count) {
+  const pool = [...BERRIES];
+  const out = [];
+  while (out.length < count && pool.length) {
+    out.push(berry(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]));
+  }
+  return out;
 }
 
 export const ITEM_ICONS = {

@@ -125,7 +125,7 @@ export function feed(state) {
   const woke = wakeAtNightPenalty(pet);
   pet.hunger = clamp(pet.hunger + 30);
   pet.careGoodEvents += 1;
-  gainXp(pet, 8);
+  gainXp(pet, 12);
   return { woke };
 }
 
@@ -134,7 +134,7 @@ export function clean(state) {
   pet.poopCount = 0;
   pet.hygiene = clamp(pet.hygiene + 40);
   pet.careGoodEvents += 1;
-  gainXp(pet, 6);
+  gainXp(pet, 8);
 }
 
 // Quita un único "leftover" tocado en pantalla (en vez de limpiar todos de golpe).
@@ -144,7 +144,7 @@ export function removeLeftover(state) {
   pet.poopCount -= 1;
   pet.hygiene = clamp(pet.hygiene + 15);
   pet.careGoodEvents += 1;
-  gainXp(pet, 4);
+  gainXp(pet, 5);
 }
 
 export function giveMedicine(state) {
@@ -154,7 +154,7 @@ export function giveMedicine(state) {
   pet.hygiene = clamp(pet.hygiene + 10);
   if (wasSick) {
     pet.careGoodEvents += 1;
-    gainXp(pet, 10);
+    gainXp(pet, 14);
   }
   return { wasSick };
 }
@@ -176,11 +176,11 @@ export function applyPlayResult(state, success) {
     pet.happiness = clamp(pet.happiness + 25);
     pet.energy = clamp(pet.energy - 10);
     pet.careGoodEvents += 1;
-    gainXp(pet, 10);
+    gainXp(pet, 22);
   } else {
     pet.happiness = clamp(pet.happiness + 8);
     pet.energy = clamp(pet.energy - 10);
-    gainXp(pet, 3);
+    gainXp(pet, 8);
   }
   return { woke };
 }
@@ -190,6 +190,18 @@ export function petTap(state) {
   const pet = state.pet;
   pet.happiness = clamp(pet.happiness + 4);
   gainXp(pet, 2);
+}
+
+// Jugar con un Pokémon salvaje que se ha acercado: es la interacción que más
+// da, porque hay que estar delante y pillarlo mientras anda por ahí.
+export function playWithWild(state) {
+  const pet = state.pet;
+  const woke = wakeAtNightPenalty(pet);
+  pet.happiness = clamp(pet.happiness + 14);
+  pet.energy = clamp(pet.energy - 4);
+  pet.careGoodEvents += 1;
+  gainXp(pet, 18);
+  return { woke };
 }
 
 export function careScore(pet) {

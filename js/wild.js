@@ -9,10 +9,12 @@ import { applyShadow, footOffset } from './sprite-shadow.js';
 import { placeActor, STEP_U, STEP_V } from './world.js';
 import { SPECIES_POOL } from './species-pool.js';
 
-const MAX_WILD = 3;
+const MAX_WILD = 2;
 const STEP_MS = 620;          // andan un poco más lentos que la mascota
-const SPAWN_MIN_MS = 5000;
-const SPAWN_MAX_MS = 13000;
+// Aparecen con cuentagotas: un salvaje tiene que ser un acontecimiento, no
+// ruido de fondo.
+const SPAWN_MIN_MS = 25000;
+const SPAWN_MAX_MS = 60000;
 const LIFE_STEPS = [14, 30];  // pasos que se quedan antes de irse
 const FADE_MS = 400;
 
@@ -90,6 +92,9 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       onTap?.(actor);
     });
 
+    actor.cheer = () => hop(actor);
+    actor.faceTo = (dir) => img.style.setProperty('--flip', dir > 0 ? '-1' : '1');
+
     stageEl.appendChild(wrap);
     actors.push(actor);
 
@@ -124,6 +129,12 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
 
   function step(actor) {
     if (stopped) return;
+
+    // mientras juega con tu Pokémon se queda donde está
+    if (actor.busy) {
+      actor.timer = setTimeout(() => step(actor), STEP_MS);
+      return;
+    }
 
     // De noche (o cuando la vista no está activa) se van yendo.
     if (isPaused?.()) actor.leaving = true;

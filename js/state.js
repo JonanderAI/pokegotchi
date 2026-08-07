@@ -32,8 +32,12 @@ export const TIMING = {
   sicknessCheckChance: 0.05,
 };
 
-export const XP_PER_LEVEL = 50;
-export const XP_PER_TICK = 0.2; // se gana solo, poco a poco, con el paso del tiempo
+export const XP_PER_LEVEL = 40;
+// Se gana algo solo con el paso del tiempo, pero poco: la experiencia de verdad
+// sale de hacerle caso (ver los valores de cada cuidado en care.js). Antes un
+// nivel eran 4 horas de reloj y las interacciones daban migajas, asi que subir
+// de nivel no dependia de ti.
+export const XP_PER_TICK = 0.5;
 
 function freshPet() {
   return {
