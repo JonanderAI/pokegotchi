@@ -7,6 +7,7 @@ import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
 import { isNight, eggProgress, mood, currentNeeds } from './care.js';
 import { levelFromXp } from './state.js';
+import * as notify from './notify.js';
 
 let _state = null;
 let _deps = null;
@@ -1524,6 +1525,88 @@ function renderPokedex(state) {
   }
 }
 
+// Interruptor de los avisos. Va aparte porque tiene que repintarse solo al
+// tocarlo: la pantalla de Ajustes solo se monta al entrar en ella (ver
+// mountedTab), así que un render() no lo actualizaría.
+function buildNotificationsSetting() {
+  const wrap = document.createElement('div');
+  wrap.style.width = '100%';
+
+  const btn = document.createElement('button');
+  btn.className = 'menu-item';
+  btn.style.width = '100%';
+
+  const note = document.createElement('p');
+  note.className = 'dex-detail';
+
+  function paint() {
+    const permission = notify.permission();
+
+    if (permission === 'unsupported') {
+      btn.textContent = 'Avisos no disponibles';
+      btn.disabled = true;
+      note.textContent = 'Este navegador no sabe enseñar avisos. En Chrome para Android sí funciona.';
+      return;
+    }
+    if (permission === 'denied') {
+      btn.textContent = 'Avisos bloqueados';
+      btn.disabled = true;
+      note.textContent = 'Los bloqueaste para esta página. Hay que volver a permitirlos desde los ajustes del navegador.';
+      return;
+    }
+
+    const on = Boolean(_state.settings && _state.settings.notifications) && permission === 'granted';
+    btn.disabled = false;
+    btn.textContent = on ? 'Avisos: activados' : 'Avisos: desactivados';
+    note.textContent = on
+      ? 'Te avisamos cuando tenga hambre, se ponga malo o haga una travesura, siempre que el juego siga abierto de fondo. Con la app cerrada del todo no hay avisos: al volver se te cuenta lo que ha pasado.'
+      : 'Actívalos para que te avise cuando necesite algo teniendo el juego de fondo.';
+  }
+
+  btn.addEventListener('click', async () => {
+    const on = Boolean(_state.settings && _state.settings.notifications) && notify.permission() === 'granted';
+
+    if (on) {
+      _state.settings.notifications = false;
+      _deps.saveState(_state);
+      paint();
+      return;
+    }
+
+    // El permiso se pide aquí, dentro del gesto: los navegadores descartan la
+    // petición si no viene de una interacción del usuario.
+    const result = await notify.requestPermission();
+    if (result !== 'granted') {
+      paint();
+      showBanner(result === 'denied' ? 'Avisos bloqueados' : 'Sin permiso no hay avisos', {
+        tone: 'warn',
+        icon: 'fa-bell-slash',
+        desc: result === 'denied'
+          ? 'Los has bloqueado para esta página. Hay que volver a permitirlos desde los ajustes del navegador.'
+          : 'Hace falta darle a "Permitir" para que te podamos avisar.',
+      });
+      return;
+    }
+
+    _state.settings.notifications = true;
+    _deps.saveState(_state);
+    paint();
+    const sent = await notify.sendTestNotification(_state);
+    if (!sent) {
+      showBanner('Avisos activados', {
+        tone: 'warn',
+        icon: 'fa-bell',
+        desc: 'Aunque este navegador no ha podido enseñar el de prueba.',
+      });
+    }
+  });
+
+  paint();
+  wrap.appendChild(btn);
+  wrap.appendChild(note);
+  return wrap;
+}
+
 function renderSettings() {
   viewRoot.innerHTML = '';
   const title = document.createElement('p');
@@ -1537,6 +1620,8 @@ function renderSettings() {
   nameBtn.textContent = 'Ponerle un mote';
   nameBtn.addEventListener('click', askNickname);
   viewRoot.appendChild(nameBtn);
+
+  viewRoot.appendChild(buildNotificationsSetting());
 
   const btn = document.createElement('button');
   btn.className = 'menu-item';

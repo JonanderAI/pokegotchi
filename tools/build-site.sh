@@ -19,8 +19,8 @@ S=sprites
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-cp index.html "$OUT/"
-cp -r css js "$OUT/"
+cp index.html manifest.webmanifest sw.js "$OUT/"
+cp -r css js icons "$OUT/"
 
 # carpeta entera (con lo que cuelgue de ella)
 copy_dir() {

@@ -93,8 +93,21 @@ function freshState() {
     pet: freshPet(),
     pokedex: {}, // { [speciesId]: { seen: true, raised: bool, name, types } }
     gifts: [],   // bayas que te han regalado los salvajes, por su nombre
+    settings: { notifications: false },
+    notifiedAt: {}, // { [tipo de aviso]: cuándo se mandó el último }
     lastSeenAt: Date.now(),
   };
+}
+
+// Los campos que se han ido añadiendo después se rellenan aquí en vez de subir
+// SCHEMA_VERSION: cambiar la versión hace que loadState tire la partida, y
+// nadie quiere perder su Pokédex porque el juego haya aprendido a avisar.
+function withDefaults(state) {
+  if (!state.settings) state.settings = { notifications: false };
+  if (typeof state.settings.notifications !== 'boolean') state.settings.notifications = false;
+  if (!state.notifiedAt) state.notifiedAt = {};
+  if (!state.gifts) state.gifts = [];
+  return state;
 }
 
 export function loadState() {
@@ -103,7 +116,7 @@ export function loadState() {
     if (!raw) return freshState();
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.version !== SCHEMA_VERSION) return freshState();
-    return parsed;
+    return withDefaults(parsed);
   } catch {
     return freshState();
   }
@@ -120,6 +133,9 @@ export function saveState(state) {
 
 export function startNewEgg(state) {
   state.pet = freshPet();
+  // Los avisos empiezan de cero con el Pokémon nuevo: si no, el que se acaba de
+  // llevar Oak le deja puesta la espera al que viene.
+  state.notifiedAt = {};
 }
 
 export function clearSave() {

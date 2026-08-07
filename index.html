@@ -4,7 +4,20 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>PokéGotchi</title>
+<meta name="description" content="Cría un Pokémon desde que nace en un huevo hasta que el profesor Oak se lo lleva a estudiar." />
+
+<!-- Instalable en Android. Este manifiesto es el de respaldo, con el huevo de
+     icono: en cuanto el juego arranca, js/pwa.js lo sustituye por uno generado
+     al vuelo con el sprite del Pokémon que estés criando. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#ffffff" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="PokéGotchi" />
 <link rel="icon" href="sprites/pokemon-icons/pokemon/icons/egg.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
 <link rel="stylesheet" href="css/base.css" />
 </head>

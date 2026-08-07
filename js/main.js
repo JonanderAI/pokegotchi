@@ -5,6 +5,8 @@ import { hatchNewEgg, refineEggSpecies } from './lifecycle.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { registerSeen } from './pokedex.js';
 import { initUI, render, showBanner, goHome, playIntro, askNickname } from './ui.js';
+import { registerServiceWorker, syncAppIcon } from './pwa.js';
+import { checkNeeds, notifyEvent } from './notify.js';
 
 const state = loadState();
 
@@ -40,6 +42,7 @@ function handleEvents(events, { quiet = false } = {}) {
         onAction: askNickname,
       });
       if (!quiet) playIntro('hatch');
+      if (!quiet) notifyEvent(state, 'hatched');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {
       notify('Tu Pokémon está enfermo', {
@@ -85,6 +88,7 @@ function handleEvents(events, { quiet = false } = {}) {
       desc: 'Su nueva forma ya aparece en la Pokédex.',
     });
     if (!quiet) playIntro('evolve');
+    if (!quiet) notifyEvent(state, 'evolved');
     ensureSpeciesRegistered();
   }
 }
@@ -120,17 +124,23 @@ function loop() {
   // el huevo va por su cuenta, con el reloj de la pantalla
   if (state.pet.phase === 'egg') events.push(...care.tickEgg(state, elapsed));
 
+  let simulated = false;
   while (pending >= SIM_TICK_MS) {
     pending -= SIM_TICK_MS;
     events.push(...care.tick(state));
+    simulated = true;
   }
 
   lastLoopAt = now;
+  // Los avisos se miran al ritmo del juego, no al de la pantalla: entre tick y
+  // tick no puede haber cambiado nada de lo que se avisa.
+  if (simulated) checkNeeds(state);
   // sin condicion: handleEvents tambien recoge el aviso de evolucion, que lo
   // deja puesto la consulta a PokeAPI cuando le da la gana y no viene como
   // evento del tick
   handleEvents(events);
   render(state);
+  syncAppIcon(state);
   saveState(state);
 }
 
@@ -172,9 +182,12 @@ function applyTimeAway() {
 // sprites se quedarian en el estatico.
 await loadSpriteSheets();
 
+registerServiceWorker();
+
 initUI(state, { care, onOakContinue, saveState, resetGame });
 applyTimeAway();
 ensureSpeciesRegistered();
 tryRefineEgg();
 render(state);
+syncAppIcon(state);
 setInterval(loop, TICK_MS);
