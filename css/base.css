@@ -131,23 +131,28 @@ html, body {
 /* barra de exp pegada justo debajo, como una balda de la misma tarjeta */
 #info-xp {
   margin: 0 14px;
-  /* El radio no puede pasar del alto: con 6px de alto y 16px de radio el
-     navegador lo aplasta y las esquinas de abajo salen ovaladas junto a las de
-     arriba, que sí son redondas. */
-  height: 10px;
+  /* Los 16px de abajo tienen que ser los mismos 16px de arriba de la tarjeta, y
+     el radio no puede pasar del alto de la caja: con la barra a 6px el navegador
+     lo aplastaba y las esquinas salían ovaladas. Así que la balda mide lo que
+     necesita el redondeo y la barra de progreso va metida dentro. */
+  height: 16px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
   background: rgba(255, 255, 255, .38);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   border-top: none;
-  border-radius: 0 0 10px 10px;
+  border-radius: 0 0 16px 16px;
   overflow: hidden;
   flex-shrink: 0;
 }
 #info-xp i {
   display: block;
-  height: 100%;
+  height: 5px;
   width: 0%;
+  border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), #7fd0ff);
   transition: width .3s ease;
 }
