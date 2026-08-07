@@ -366,25 +366,37 @@ function renderInfoCard(state) {
   // manda el mote; si no le has puesto ninguno, el nombre de su especie
   infoNameEl.textContent = pet.nickname || (info ? info.name : '???');
   infoStageEl.textContent = statusText(pet);
-  infoLevelEl.textContent = levelFor(pet);
+  infoLevelEl.innerHTML = `<b>Nv.</b>${levelFor(pet)}`;
   setXpRing(xpProgress(pet));
 }
 
-// El trazo del borde se recorta con dasharray: se deja al descubierto la parte
-// que toca y se esconde el resto. La longitud se mide del propio rectángulo, que
-// es quien sabe cuánto mide su perímetro con las esquinas redondeadas.
-let xpRingLength = 0;
+// El trazo del borde se recorta con dasharray: un trozo visible de lo que lleva
+// y otro invisible con lo que le falta. La longitud la da el propio rectángulo,
+// que es quien sabe cuánto mide su perímetro con las esquinas redondeadas.
+//
+// El path de un <rect> arranca en (x + rx, y), o sea justo después de la esquina
+// de arriba a la izquierda. Como debe empezar arriba en el centro, se corre el
+// patrón media arista superior con el dashoffset.
+let xpRing = null;
+
+function measureXpRing(fill) {
+  const len = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
+  if (!len) return null;
+  const w = parseFloat(fill.getAttribute('width'));
+  const rx = parseFloat(fill.getAttribute('rx'));
+  return { len, start: (w - 2 * rx) / 2 };
+}
 
 function setXpRing(progress) {
   const fill = infoXpEl.querySelector('.xp-fill');
   if (!fill) return;
-  if (!xpRingLength) {
-    xpRingLength = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
-    if (!xpRingLength) return;
-    fill.style.strokeDasharray = xpRingLength;
+  if (!xpRing) {
+    xpRing = measureXpRing(fill);
+    if (!xpRing) return;
+    fill.style.strokeDashoffset = -xpRing.start;
   }
-  const p = Math.max(0, Math.min(1, progress));
-  fill.style.strokeDashoffset = xpRingLength * (1 - p);
+  const done = xpRing.len * Math.max(0, Math.min(1, progress));
+  fill.style.strokeDasharray = `${done} ${xpRing.len - done}`;
 }
 
 function renderStatbar(state) {

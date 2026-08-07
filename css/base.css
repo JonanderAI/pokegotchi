@@ -139,10 +139,7 @@ html, body {
 .xp-track { stroke: rgba(20, 24, 40, .12); }
 .xp-fill {
   stroke: var(--accent);
-  /* empieza arriba y va en el sentido de las agujas del reloj */
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
-  transition: stroke-dashoffset .35s ease;
+  transition: stroke-dasharray .35s ease;
 }
 
 #info-icon {
@@ -157,8 +154,8 @@ html, body {
    sea que tenga detrás. */
 #info-level {
   position: absolute;
-  right: -5px;
-  bottom: -6px;
+  left: 0;
+  bottom: -1px;
   font-size: 12px;
   font-weight: bold;
   line-height: 1;
@@ -168,6 +165,7 @@ html, body {
     1.5px 0 0 #fff, 1.5px 1.5px 0 #fff, 0 1.5px 0 #fff,
     -1.5px 1.5px 0 #fff, -1.5px 0 0 #fff;
 }
+#info-level b { font-size: 8px; font-weight: bold; margin-right: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
   .xp-fill { transition: none; }

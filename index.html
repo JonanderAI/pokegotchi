@@ -34,9 +34,13 @@
       <div id="info-icon-box">
         <!-- La experiencia es el propio borde del cuadro, que se va cerrando: un
              trazo sobre el perímetro redondeado, recortado con dasharray. -->
+        <!-- El trazo va centrado en el path, así que el rect se mete media
+             anchura de trazo (1,5) y su radio baja otro tanto: así el borde de
+             fuera del anillo cae justo sobre el borde del cuadro, con los
+             mismos 12px de redondeo. -->
         <svg id="info-xp" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
-          <rect class="xp-track" x="2" y="2" width="40" height="40" rx="12" />
-          <rect class="xp-fill" x="2" y="2" width="40" height="40" rx="12" />
+          <rect class="xp-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+          <rect class="xp-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
         </svg>
         <img id="info-icon" alt="" />
         <span id="info-level"></span>
