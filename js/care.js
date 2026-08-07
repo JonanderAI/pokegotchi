@@ -1,5 +1,5 @@
 import { TIMING, XP_PER_TICK, SIM_TICK_MS, MAX_CATCHUP_TICKS } from './state.js';
-import { advanceStageIfNeeded, sendToOak } from './lifecycle.js';
+import { advanceStageIfNeeded, sendToOak, commitEvolution } from './lifecycle.js';
 
 function clamp(v) {
   return Math.max(0, Math.min(100, v));
@@ -162,6 +162,25 @@ export function giveMedicine(state) {
   return { wasSick };
 }
 
+// Por debajo de esto se le puede mandar a la cama: si va sobrado de energía no
+// hay quien lo acueste, igual que en la vida real.
+const SLEEPY_ENERGY = 65;
+
+// Mandarle a dormir adelanta la noche: se salta lo que quedaba de día y empieza
+// ya el tramo nocturno, que es cuando recupera energía. No acorta la noche.
+export function sendToSleep(state) {
+  const pet = state.pet;
+  if (isNight(pet)) return { ok: false, reason: 'already' };
+  if (pet.energy > SLEEPY_ENERGY) return { ok: false, reason: 'not_sleepy' };
+
+  const cycleLen = TIMING.dayTicks + TIMING.nightTicks;
+  pet.cycleTick = Math.floor(pet.cycleTick / cycleLen) * cycleLen + TIMING.dayTicks;
+  pet.awakenedThisNight = false;
+  pet.careGoodEvents += 1;
+  gainXp(pet, 6);
+  return { ok: true };
+}
+
 export function discipline(state) {
   const pet = state.pet;
   if (!pet.mischiefActive) return { resolved: false };
@@ -241,8 +260,47 @@ export function mood(pet) {
   return Math.max(0, Math.min(1, (pet.happiness * 0.7 + pet.energy * 0.3) / 100));
 }
 
+// Por debajo de esto una necesidad ya pide atención; por debajo de CRITICO, urge.
+const NEED_LOW = 40;
+const NEED_CRITICAL = 20;
+
+// Cuántos bocadillos caben al lado sin taparlo entero.
+const MAX_NEEDS = 3;
+
+// Qué le pasa ahora mismo, de lo más urgente a lo menos. La UI lo pinta como
+// bocadillos junto a su cabeza: la barra de estados dice cuánto le queda de cada
+// cosa, esto dice qué mirar primero.
+export function currentNeeds(pet) {
+  if (pet.phase === 'egg' || pet.phase === 'oak') return [];
+
+  const need = (key, value) => ({ key, urgent: value <= NEED_CRITICAL });
+  const out = [];
+
+  // La evolución manda sobre todo lo demás: es el momento del juego.
+  if (pet.pendingEvolution) out.push({ key: 'evolving', urgent: false, action: true });
+  if (pet.sick) out.push(need('sick', 0));
+  if (pet.mischiefActive) out.push(need('mischief', 0));
+  if (isNight(pet)) out.push(need('sleeping', 100));
+  if (pet.poopCount > 0 || pet.hygiene < NEED_LOW) {
+    out.push(need('dirty', pet.poopCount > 0 ? Math.min(pet.hygiene, NEED_CRITICAL) : pet.hygiene));
+  }
+
+  // Entre las que van flojas, primero la que peor está.
+  [
+    { key: 'hungry', value: pet.hunger },
+    { key: 'tired', value: pet.energy },
+    { key: 'sad', value: pet.happiness },
+  ].filter((c) => c.value < NEED_LOW)
+    .sort((a, b) => a.value - b.value)
+    .forEach((c) => out.push(need(c.key, c.value)));
+
+  // Si no hay nada que reclamar, que al menos se le vea contento.
+  if (!out.length) out.push(need('happy', 100));
+  return out.slice(0, MAX_NEEDS);
+}
+
 export function careScore(pet) {
   return (pet.hunger + pet.happiness + pet.hygiene + pet.energy) / 4 + pet.careGoodEvents * 2 - pet.careBadEvents * 4;
 }
 
-export { sendToOak };
+export { sendToOak, commitEvolution };

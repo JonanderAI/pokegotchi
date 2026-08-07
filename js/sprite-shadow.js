@@ -148,8 +148,8 @@ export function measureSprite(src, cell) {
 
 // Dos tonos, como las sombras de los juegos: núcleo sólido y un borde más flojo.
 const SHADOW_RGB = '28, 33, 52';
-const CORE_ALPHA = 0.34;
-const RIM_ALPHA = 0.18;
+const CORE_ALPHA = 0.22;
+const RIM_ALPHA = 0.11;
 const CORE_RATIO = 0.62; // parte central (en distancia elíptica al cuadrado)
 
 const ellipseCache = new Map();

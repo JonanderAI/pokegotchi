@@ -5,7 +5,7 @@ import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, STEP_U,
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
 import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
-import { isNight, eggProgress, mood } from './care.js';
+import { isNight, eggProgress, mood, currentNeeds } from './care.js';
 import { XP_PER_LEVEL } from './state.js';
 
 let _state = null;
@@ -24,6 +24,9 @@ let petImgEl = null;
 let petShadowEl = null;
 let petAnim = null;
 let zEl = null;
+let bubbleEl = null;
+let bubbleKey = null;  // el estado que ya está pintado, para no rehacerlo cada tick
+let evolving = false;  // durante la animación de evolución, antes de cambiar el sprite
 let feeding = null;
 let leftoverEls = [];
 let currentSprite = null;
@@ -167,7 +170,13 @@ export function initUI(state, deps) {
     closeSheets();
     render(_state);
     _deps.saveState(_state);
-    if (_state.pet.nickname) showBanner(`¡Ahora se llama ${_state.pet.nickname}!`);
+    if (_state.pet.nickname) {
+      showBanner('Ya tiene nombre', {
+        tone: 'good',
+        icon: 'fa-pen',
+        desc: `A partir de ahora se llama ${_state.pet.nickname}.`,
+      });
+    }
   });
 
   morePanelEl.querySelectorAll('.more-btn').forEach((btn) => {
@@ -271,6 +280,15 @@ export function render(state) {
   else if (uiTab === 'info') renderInfo(state);
 }
 
+// Los avisos van por tono, no todos iguales: el color y el icono ya dicen si es
+// una buena noticia o algo que hay que atender antes de leer la frase.
+const BANNER_TONES = {
+  info: 'fa-circle-info',
+  good: 'fa-circle-check',
+  warn: 'fa-triangle-exclamation',
+  bad:  'fa-circle-exclamation',
+};
+
 export function showBanner(message, opts = {}) {
   if (bannerTimeout) {
     clearTimeout(bannerTimeout);
@@ -280,10 +298,32 @@ export function showBanner(message, opts = {}) {
     bannerEl.classList.add('hidden');
     return;
   }
+
+  const tone = BANNER_TONES[opts.tone] ? opts.tone : 'info';
+  bannerEl.className = `banner-tone-${tone}`;
   bannerEl.innerHTML = '';
-  const p = document.createElement('p');
-  p.textContent = message;
-  bannerEl.appendChild(p);
+
+  const icon = document.createElement('span');
+  icon.className = 'banner-icon';
+  icon.innerHTML = `<i class="fa-solid ${opts.icon || BANNER_TONES[tone]}"></i>`;
+  bannerEl.appendChild(icon);
+
+  // Titular corto y, debajo, la explicación: el titular se lee de pasada y la
+  // descripción está ahí para quien quiera saber qué hacer.
+  const text = document.createElement('div');
+  text.className = 'banner-text';
+  const title = document.createElement('p');
+  title.className = 'banner-title';
+  title.textContent = message;
+  text.appendChild(title);
+  if (opts.desc) {
+    const desc = document.createElement('p');
+    desc.className = 'banner-desc';
+    desc.textContent = opts.desc;
+    text.appendChild(desc);
+  }
+  bannerEl.appendChild(text);
+
   if (opts.actionLabel) {
     const btn = document.createElement('button');
     btn.textContent = opts.actionLabel;
@@ -293,7 +333,12 @@ export function showBanner(message, opts = {}) {
     });
     bannerEl.appendChild(btn);
   }
-  bannerEl.classList.remove('hidden');
+
+  // reinicia la entrada aunque llegue un aviso pisando al anterior
+  bannerEl.classList.remove('in');
+  void bannerEl.offsetWidth;
+  bannerEl.classList.add('in');
+
   if (!opts.sticky) {
     bannerTimeout = setTimeout(() => bannerEl.classList.add('hidden'), opts.autoHideMs || 3500);
   }
@@ -339,14 +384,12 @@ function renderStatbar(state) {
   statbarEl.querySelectorAll('.stat-row').forEach((el) => {
     const stat = el.dataset.stat;
     el.querySelector('img').src = icons[stat];
-    const filled = Math.max(0, Math.min(5, Math.round(values[stat] / 20)));
-    const dotsEl = el.querySelector('.stat-dots');
-    dotsEl.innerHTML = '';
-    for (let i = 0; i < 5; i += 1) {
-      const dot = document.createElement('span');
-      dot.className = `dot${i < filled ? ' filled' : ''}`;
-      dotsEl.appendChild(dot);
-    }
+
+    // Barra en vez de cinco puntos: se ve el matiz (un 55% y un 45% ya no son
+    // lo mismo) y el color dice solo si hay que hacer algo.
+    const value = Math.max(0, Math.min(100, values[stat]));
+    el.querySelector('.stat-meter i').style.width = `${value}%`;
+    el.dataset.level = value >= 60 ? 'good' : value >= 30 ? 'warn' : 'bad';
   });
 }
 
@@ -520,7 +563,11 @@ function armBerry(berry) {
 
   petStageEl.classList.add('placing-food');
   petStageEl.addEventListener('pointerdown', onStagePlace);
-  showBanner('Toca el suelo donde quieras lanzarla.', { sticky: true });
+  showBanner('¿Dónde se la dejas?', {
+    icon: 'fa-hand-pointer',
+    desc: 'Toca el suelo y la baya caerá ahí; él irá a por ella.',
+    sticky: true,
+  });
 }
 
 // Coordenadas del escenario a partir de un evento de puntero.
@@ -621,9 +668,13 @@ function finishEating() {
   const especial = !!(berry && berry.gift);
   if (especial) _deps.care.takeGift(_state, berry.name);
   const { woke } = _deps.care.feed(_state, { special: especial });
-  showBanner(woke
-    ? '¡Ñam! Le has despertado, pero se la ha comido.'
-    : especial ? '¡Ñam! Esa baya le ha encantado.' : '¡Ñam! Se ha comido la baya.');
+  showBanner('¡Ñam!', {
+    tone: woke ? 'warn' : 'good',
+    icon: 'fa-drumstick-bite',
+    desc: woke ? 'Le has despertado para comer, pero no ha dejado ni las hojas.'
+      : especial ? 'Esa baya le ha encantado: alimenta más que las normales.'
+        : 'Se ha comido la baya y ya tiene menos hambre.',
+  });
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
@@ -665,7 +716,12 @@ function onWildTap(actor) {
 
   nameOf(actor.speciesId).then((name) => {
     if (playdate && playdate.actor === actor) {
-      showBanner(name ? `¡Vais a jugar con ${name}!` : '¡Vais a jugar juntos!');
+      showBanner('¡A jugar!', {
+        tone: 'good',
+        icon: 'fa-heart',
+        desc: name ? `${name} se ha acercado con ganas de fiesta.`
+          : 'Un Pokémon salvaje se ha acercado con ganas de fiesta.',
+      });
     }
   });
 
@@ -772,8 +828,20 @@ function finishPlaydate() {
   actor.leaving = true; // se despide y sigue su camino
 
   const { woke, gift } = _deps.care.playWithWild(_state);
-  if (gift) showBanner('¡Qué bien lo habéis pasado! Se despide dejándote una baya.');
-  else showBanner(woke ? '¡Le has despertado, pero se lo ha pasado bien!' : '¡Qué bien lo habéis pasado juntos!');
+  if (gift) {
+    showBanner('¡Qué bien lo habéis pasado!', {
+      tone: 'good',
+      icon: 'fa-gift',
+      desc: 'Se despide dejándote una baya: la tienes en la Mochila.',
+    });
+  } else {
+    showBanner('¡Qué bien lo habéis pasado!', {
+      tone: woke ? 'warn' : 'good',
+      icon: 'fa-heart',
+      desc: woke ? 'Le has despertado para jugar, pero ha merecido la pena.'
+        : 'Un rato de juego y se le nota en la felicidad.',
+    });
+  }
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
@@ -852,6 +920,8 @@ function buildHomeDOM(state) {
   petImgEl = null;
   petShadowEl = null;
   zEl = null;
+  bubbleEl = null;
+  bubbleKey = null;
   leftoverEls = [];
 
   const pet = state.pet;
@@ -909,10 +979,18 @@ function buildHomeDOM(state) {
   img.className = 'pet-img';
   wrap.appendChild(img);
 
+  // Tres Z sueltas en vez de un "Zzz" de una pieza: cada una sale por su cuenta
+  // y así se ve el ritmo de la respiración.
   const z = document.createElement('div');
   z.className = 'sleep-z hidden';
-  z.textContent = 'Zzz';
+  z.innerHTML = '<span>Z</span><span>Z</span><span>Z</span>';
   wrap.appendChild(z);
+
+  // Los bocadillos cuelgan del wrap, no del escenario: así se mueven con él
+  // cuando camina y no hay que recolocarlos a mano en cada paso.
+  const bubble = document.createElement('div');
+  bubble.className = 'pet-bubbles hidden';
+  wrap.appendChild(bubble);
 
   wrap.addEventListener('pointerdown', () => {
     const now = Date.now();
@@ -958,6 +1036,8 @@ function buildHomeDOM(state) {
   petImgEl = img;
   petShadowEl = shadow;
   zEl = z;
+  bubbleEl = bubble;
+  bubbleKey = null;
 
   destroyPetAnim();
   petAnim = animateSprite(img, pet.speciesId);
@@ -1013,6 +1093,85 @@ function updateEgg(state) {
   eggImgEl.style.setProperty('--egg-lift', `${Math.round(p * 7)}px`);
 }
 
+// Cada estado con su icono y su color. El color hace casi todo el trabajo: se
+// lee de un vistazo sin llegar a mirar qué icono es.
+const NEED_LOOK = {
+  evolving: { icon: 'fa-wand-magic-sparkles',   color: '#a78bfa', label: '¡Quiere evolucionar! Tócalo' },
+  sick:     { icon: 'fa-virus',                 color: '#c79ae8', label: 'Se encuentra mal' },
+  mischief: { icon: 'fa-face-grin-tongue-wink', color: '#f5c469', label: 'Está haciendo una travesura' },
+  sleeping: { icon: 'fa-moon',                  color: '#9aa8dd', label: 'Está durmiendo' },
+  dirty:    { icon: 'fa-poo',                   color: '#c9a888', label: 'Esto está sucio' },
+  hungry:   { icon: 'fa-drumstick-bite',        color: '#f4a973', label: 'Tiene hambre' },
+  tired:    { icon: 'fa-face-tired',            color: '#aab6cc', label: 'Está cansado' },
+  sad:      { icon: 'fa-face-frown',            color: '#93c1f0', label: 'Está triste' },
+  happy:    { icon: 'fa-face-smile-beam',       color: '#86d9b3', label: 'Está genial' },
+};
+
+// Cuánto dura el "cargando" antes de que cambie el sprite: el Pokémon tiembla y
+// se pone blanco, como en los juegos, y solo entonces se aplica el cambio.
+const EVOLVE_CHARGE_MS = 1400;
+
+function startEvolution() {
+  if (evolving || !_state.pet.pendingEvolution) return;
+  evolving = true;
+
+  if (bubbleEl) bubbleEl.classList.add('hidden');
+  if (petImgEl) petImgEl.classList.add('evolve-charge');
+  if (petStageEl) petStageEl.classList.add('evolve-charge-stage');
+  stopWalkTimer();
+
+  setTimeout(() => {
+    evolving = false;
+    if (petStageEl) petStageEl.classList.remove('evolve-charge-stage');
+    // El aviso, el fogonazo y el sprite nuevo los recoge el bucle de main.js en
+    // cuanto ve pendingEvolutionNotice: aquí solo se confirma el cambio.
+    if (!_deps.care.commitEvolution(_state)) return;
+    _deps.saveState(_state);
+  }, EVOLVE_CHARGE_MS);
+}
+
+function renderBubbles(state) {
+  if (!bubbleEl) return;
+  if (evolving) { bubbleEl.classList.add('hidden'); return; } // ya está en marcha
+
+  const needs = currentNeeds(state.pet).filter((n) => NEED_LOOK[n.key]);
+  if (!needs.length) {
+    bubbleEl.classList.add('hidden');
+    bubbleKey = null;
+    return;
+  }
+
+  // Se reconstruye solo cuando cambia la lista: si no, cada medio segundo se
+  // reiniciaría la animación de entrada de todos.
+  const key = needs.map((n) => `${n.key}:${n.urgent}`).join('|');
+  if (key !== bubbleKey) {
+    bubbleKey = key;
+    bubbleEl.innerHTML = '';
+    needs.forEach((need, i) => {
+      const look = NEED_LOOK[need.key];
+      const el = document.createElement('div');
+      el.className = 'pet-bubble';
+      el.style.setProperty('--i', i); // su sitio en la diagonal, lo coloca el CSS
+      el.classList.toggle('urgent', need.urgent);
+      el.classList.toggle('calm', need.key === 'happy' || need.key === 'sleeping');
+      // el de evolución no es un aviso, es un botón: se puede tocar
+      el.classList.toggle('action', !!need.action);
+      el.style.setProperty('--bubble-color', look.color);
+      el.setAttribute('role', 'img');
+      el.setAttribute('aria-label', look.label);
+      el.innerHTML = `<i class="fa-solid ${look.icon}"></i>`;
+      if (need.action) {
+        el.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation(); // si no, cuenta también como caricia al Pokémon
+          startEvolution();
+        });
+      }
+      bubbleEl.appendChild(el);
+    });
+  }
+  bubbleEl.classList.remove('hidden');
+}
+
 function updateHomeDynamic(state) {
   const pet = state.pet;
   if (pet.phase === 'egg') {
@@ -1032,6 +1191,8 @@ function updateHomeDynamic(state) {
   // nosotros y no el GIF.
   if (petAnim) petAnim.setSpeed(0.6 + mood(pet) * 0.7);
 
+  renderBubbles(state);
+
   if (zEl) zEl.classList.toggle('hidden', !night);
   if (petWrapEl) petWrapEl.classList.toggle('asleep', night);
   petStageEl.classList.toggle('night', night);
@@ -1043,7 +1204,8 @@ function updateHomeDynamic(state) {
       pauseSpriteAnimation();
     }
   } else {
-    if (!walkTimer) scheduleWalk();
+    // mientras evoluciona se queda quieto: es su momento
+    if (!walkTimer && !evolving) scheduleWalk();
     if (asleepAnimApplied) {
       asleepAnimApplied = false;
       startSpriteAnimation();
@@ -1056,6 +1218,7 @@ const BAG_ITEMS = [
   { key: 'play', label: 'Jugar', icon: ITEM_ICONS.play },
   { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene },
   { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine },
+  { key: 'sleep', label: 'Dormir', icon: ITEM_ICONS.night },
 ];
 
 // El contenido de la Mochila se monta una vez; al abrirla solo se actualiza
@@ -1086,7 +1249,12 @@ function updateBagPanel(state) {
   if (!usable) return;
 
   // un punto rojo en lo que toca: medicina si está malito, comida si tiene hambre
-  const urgent = { medicine: pet.sick, feed: pet.hunger < 35, clean: pet.poopCount >= 2 };
+  const urgent = {
+    medicine: pet.sick,
+    feed: pet.hunger < 35,
+    clean: pet.poopCount >= 2,
+    sleep: pet.energy < 30 && !isNight(pet),
+  };
   bagPanelEl.querySelectorAll('.bag-item').forEach((btn) => {
     btn.classList.toggle('urgent', !!urgent[btn.dataset.key]);
   });
@@ -1104,10 +1272,31 @@ function onMenuAction(key) {
     startFeeding();
     return;
   }
-  if (key === 'clean') care.clean(_state);
+  if (key === 'sleep') {
+    const { ok, reason } = care.sendToSleep(_state);
+    if (ok) {
+      showBanner('Buenas noches', {
+        tone: 'good',
+        icon: 'fa-moon',
+        desc: 'Se acuesta antes de tiempo. Mientras duerme recupera energía.',
+      });
+    } else {
+      showBanner(reason === 'already' ? 'Ya está durmiendo' : 'No tiene sueño', {
+        icon: 'fa-moon',
+        desc: reason === 'already'
+          ? 'Déjale descansar: si le despiertas ahora se llevará un disgusto.'
+          : 'Todavía va sobrado de energía. Cánsale jugando un rato.',
+      });
+    }
+  } else if (key === 'clean') care.clean(_state);
   else if (key === 'medicine') {
     const { wasSick } = care.giveMedicine(_state);
-    showBanner(wasSick ? '¡Se ha recuperado!' : 'No hace falta medicina ahora mismo.');
+    showBanner(wasSick ? '¡Se ha recuperado!' : 'No le hace falta', {
+      tone: wasSick ? 'good' : 'info',
+      icon: 'fa-pills',
+      desc: wasSick ? 'Ya está sano otra vez. Cuídale la higiene para que no repita.'
+        : 'Ahora mismo está sano, guarda la medicina para cuando toque.',
+    });
   }
   render(_state);
   saveState(_state);
@@ -1150,7 +1339,11 @@ function startMinigame() {
   petStageEl.addEventListener('pointerdown', onGamePoint);
   petStageEl.addEventListener('pointermove', onGamePoint);
 
-  showBanner('¡Arrastra para atrapar las bayas!', { sticky: true });
+  showBanner('¡A por las bayas!', {
+    icon: 'fa-hand-pointer',
+    desc: 'Arrastra el dedo para moverlo y que las atrape antes de que caigan.',
+    sticky: true,
+  });
   gameDrop();
   gameStep();
   game.endTimer = setTimeout(endMinigame, GAME_MS);
@@ -1237,9 +1430,12 @@ function endMinigame() {
 
   const exito = score >= GAME_GOAL;
   _deps.care.applyPlayResult(_state, exito);
-  showBanner(exito
-    ? `¡${score} bayas! Lo habéis pasado en grande.`
-    : `${score} bayas... la próxima vez seguro que más.`);
+  showBanner(exito ? '¡Lo habéis pasado en grande!' : 'Se acabó el tiempo', {
+    tone: exito ? 'good' : 'info',
+    icon: 'fa-trophy',
+    desc: exito ? `${score} bayas atrapadas: ha sido una partidaza.`
+      : `${score} bayas... la próxima vez seguro que caen más.`,
+  });
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();

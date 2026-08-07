@@ -36,14 +36,29 @@ export function advanceStageIfNeeded(state) {
   return { type: 'stage_advance', stage: pet.phase, goodCare: wasGoodCare };
 }
 
+// La evolución queda pendiente, no se aplica sola: se anuncia con un bocadillo
+// sobre el Pokémon y evoluciona cuando lo tocas. Que el momento sea tuyo es la
+// mitad de la gracia; antes te lo encontrabas ya evolucionado al volver.
 async function tryEvolve(state) {
   const pet = state.pet;
   const fromId = pet.speciesId;
   const info = await getSpeciesInfo(fromId);
   if (info.offline || !info.evolvesTo) return;
   if (state.pet.speciesId !== fromId) return; // el estado ya cambió mientras esperábamos
-  state.pet.speciesId = info.evolvesTo;
-  state.pendingEvolutionNotice = { from: fromId, to: info.evolvesTo };
+  state.pet.pendingEvolution = info.evolvesTo;
+}
+
+// Se llama al tocar el bocadillo. Devuelve false si ya no había nada pendiente
+// (dos toques seguidos, o se reinició la partida entre medias).
+export function commitEvolution(state) {
+  const pet = state.pet;
+  const to = pet.pendingEvolution;
+  if (!to) return false;
+  const from = pet.speciesId;
+  pet.pendingEvolution = null;
+  pet.speciesId = to;
+  state.pendingEvolutionNotice = { from, to };
+  return true;
 }
 
 export function sendToOak(state, pokedex) {
@@ -53,6 +68,7 @@ export function sendToOak(state, pokedex) {
 
 export function hatchNewEgg(state) {
   state.pet.phase = 'egg';
+  state.pet.pendingEvolution = null;
   state.pet.speciesId = randomSpeciesId();
   state.pet.stageAge = 0;
   state.pet.cycleTick = 0;

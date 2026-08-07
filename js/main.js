@@ -32,13 +32,27 @@ function handleEvents(events, { quiet = false } = {}) {
 
   events.forEach((ev) => {
     if (ev.type === 'hatched') {
-      notify('¡El huevo ha eclosionado!', { actionLabel: 'Ponerle nombre', onAction: askNickname });
+      notify('¡El huevo ha eclosionado!', {
+        tone: 'good',
+        icon: 'fa-egg',
+        desc: 'Ya tienes un Pokémon al que cuidar. Ponle un mote si quieres.',
+        actionLabel: 'Ponerle nombre',
+        onAction: askNickname,
+      });
       if (!quiet) playIntro('hatch');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {
-      notify('Tu Pokémon está enfermo. Dale una medicina en la Mochila.', { sticky: true });
+      notify('Tu Pokémon está enfermo', {
+        tone: 'bad',
+        icon: 'fa-virus',
+        desc: 'Dale una medicina desde la Mochila para que se recupere.',
+        sticky: true,
+      });
     } else if (ev.type === 'mischief_start') {
-      notify('¡Tu Pokémon está haciendo una travesura!', {
+      notify('¡Está haciendo una travesura!', {
+        tone: 'warn',
+        icon: 'fa-face-grin-tongue-wink',
+        desc: 'Regáñale antes de que se le pase o se llevará un disgusto.',
         sticky: true,
         actionLabel: 'Regañar',
         onAction: () => {
@@ -48,15 +62,28 @@ function handleEvents(events, { quiet = false } = {}) {
         },
       });
     } else if (ev.type === 'mischief_timeout') {
-      notify('Se le pasó la travesura sin que le regañaras...');
+      notify('Se le pasó la travesura', {
+        tone: 'warn',
+        desc: 'No le regañaste a tiempo y ha perdido algo de felicidad.',
+      });
     } else if (ev.type === 'stage_advance') {
-      notify(ev.goodCare ? '¡Ha crecido feliz y sano!' : 'Ha crecido, pero necesita más cuidados...');
+      notify(ev.goodCare ? '¡Ha crecido feliz y sano!' : 'Ha crecido a medias', {
+        tone: ev.goodCare ? 'good' : 'warn',
+        icon: 'fa-arrow-up-right-dots',
+        desc: ev.goodCare
+          ? 'Los cuidados han dado sus frutos: ha pasado de etapa en plena forma.'
+          : 'Ha pasado de etapa, pero le faltaron cuidados por el camino.',
+      });
     }
   });
 
   if (state.pendingEvolutionNotice) {
     state.pendingEvolutionNotice = null;
-    notify('¡Tu Pokémon ha evolucionado!');
+    notify('¡Tu Pokémon ha evolucionado!', {
+      tone: 'good',
+      icon: 'fa-wand-magic-sparkles',
+      desc: 'Su nueva forma ya aparece en la Pokédex.',
+    });
     if (!quiet) playIntro('evolve');
     ensureSpeciesRegistered();
   }
@@ -132,7 +159,10 @@ function applyTimeAway() {
     handleEvents([{ type: 'sick' }]);
   } else {
     const crecio = events.some((ev) => ev.type === 'stage_advance');
-    showBanner(`Han pasado ${describeAway(ticks)} desde tu última visita${crecio ? ' y ha crecido' : ''}.`);
+    showBanner('Bienvenido de vuelta', {
+      icon: 'fa-clock',
+      desc: `Han pasado ${describeAway(ticks)} desde tu última visita${crecio ? ' y ha crecido' : ''}.`,
+    });
   }
 
   saveState(state);

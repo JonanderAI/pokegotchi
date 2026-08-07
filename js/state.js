@@ -53,6 +53,7 @@ function freshPet() {
     hygiene: 100,
     energy: 100,
     sick: false,
+    pendingEvolution: null, // especie a la que evolucionará cuando toques el bocadillo
     poopCount: 0,
     mischiefActive: false,
     mischiefDeadline: 0,
