@@ -115,6 +115,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
     const img = document.createElement('div');
     img.className = 'pet-img';
     img.style.setProperty('--flip', start.dir > 0 ? '-1' : '1');
+    wrap.classList.toggle('mirrored', start.dir > 0);
     wrap.appendChild(img);
 
     const actor = {
@@ -142,7 +143,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
     }
 
     actor.cheer = () => hop(actor);
-    actor.faceTo = (dir) => img.style.setProperty('--flip', dir > 0 ? '-1' : '1');
+    actor.faceTo = (dir) => face(actor, dir);
 
     stageEl.appendChild(wrap);
     actors.push(actor);
@@ -205,10 +206,18 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       if (!point) return;
       baby.pos.u = point.u;
       baby.pos.v = point.v;
-      baby.img.style.setProperty('--flip', point.dir > 0 ? '-1' : '1');
+      face(baby, point.dir);
       hop(baby);
       place(baby);
     });
+  }
+
+  // Voltear al actor: el sprite y su sombra. La sombra se mide de los pies, que
+  // no caen en el centro del lienzo, así que si solo se refleja el sprite la
+  // sombra se queda a un lado.
+  function face(actor, dir) {
+    actor.img.style.setProperty('--flip', dir > 0 ? '-1' : '1');
+    actor.wrap.classList.toggle('mirrored', dir > 0);
   }
 
   function place(actor) {
@@ -241,7 +250,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       const exit = actor.pos.u < 0.5 ? 0 : 1;
       actor.dir = exit === 0 ? -1 : 1;
       actor.pos.u += actor.dir * STEP_U;
-      actor.img.style.setProperty('--flip', actor.dir > 0 ? '-1' : '1');
+      face(actor, actor.dir);
       hop(actor);
       place(actor);
       moveFollowers(actor);
@@ -264,7 +273,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
         if (Math.random() < 0.3) {
           actor.pos.v = Math.min(0.7, Math.max(0.02, actor.pos.v + (Math.random() < 0.5 ? -1 : 1) * STEP_V));
         }
-        actor.img.style.setProperty('--flip', actor.dir > 0 ? '-1' : '1');
+        face(actor, actor.dir);
         hop(actor);
         place(actor);
         moveFollowers(actor);

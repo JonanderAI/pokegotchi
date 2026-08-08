@@ -97,6 +97,8 @@ html, body {
   box-shadow: var(--glass-shadow);
   flex-shrink: 0;
   cursor: pointer;
+  /* el redondeo cambia al colgarle los estados o un aviso: que se vea llegar */
+  transition: border-radius .25s ease;
 }
 
 /* con los estados desplegados, la tarjeta se abre por abajo para que las dos
@@ -194,7 +196,8 @@ html, body {
   box-shadow: var(--glass-shadow);
   flex-shrink: 0;
   overflow: hidden;
-  transition: max-height .25s ease, opacity .2s ease, padding .25s ease;
+  transition: max-height .25s ease, opacity .2s ease, padding .25s ease,
+              border-radius .25s ease;
 }
 #statbar.expanded {
   max-height: 200px;
@@ -203,45 +206,68 @@ html, body {
   border-bottom-width: 1px;
 }
 
-.stat-row {
+/* Los cuatro estados, en fila: cada uno una chapa como la del Pokémon con su
+   anillo alrededor haciendo de indicador. Antes eran cuatro barras apiladas, que
+   ocupaban el triple y no se parecían a nada más de la interfaz. */
+#statbar {
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: flex-start;
+}
+
+.stat-cell {
+  position: relative;
+  width: 44px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
   --level-color: #2fb37a;
 }
-.stat-row[data-level="warn"] { --level-color: #e0a92c; }
-.stat-row[data-level="bad"]  { --level-color: #d64545; }
+.stat-cell[data-level="warn"] { --level-color: #e0a92c; }
+.stat-cell[data-level="bad"]  { --level-color: #d64545; }
 
-.stat-row img { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; }
+.stat-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  overflow: visible;
+  pointer-events: none;
+}
+.stat-ring rect {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.stat-ring .ring-track { stroke: rgba(20, 24, 40, .1); }
+.stat-ring .ring-fill {
+  stroke: var(--level-color);
+  transition: stroke-dasharray .35s ease, stroke .35s ease;
+}
+
+/* la chapa, igual que la del sprite en la tarjeta */
+.stat-cell img {
+  width: 44px;
+  height: 44px;
+  padding: 11px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 3px rgba(20, 24, 40, .08);
+}
 
 .stat-name {
-  width: 66px;
-  flex-shrink: 0;
-  font-size: 10px;
-  opacity: .7;
-}
-
-.stat-meter {
-  flex: 1;
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(20, 24, 40, .09);
-  box-shadow: 0 1px 2px rgba(20, 24, 40, .12) inset;
-}
-
-.stat-meter i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--level-color) 70%, #fff),
-    var(--level-color));
-  transition: width .35s ease, background .35s ease;
+  margin-top: 4px;
+  font-size: 8px;
+  text-align: center;
+  opacity: .6;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stat-meter i { transition: none; }
+  .stat-ring .ring-fill { transition: none; }
 }
 
 #view-root {
@@ -272,6 +298,14 @@ html, body {
   transition: transform .55s cubic-bezier(.25, .8, .3, 1);
   will-change: transform;
 }
+
+/* Siguiéndole mientras pasea: va despacio y llega tarde a propósito, que es lo
+   que hace que parezca una cámara detrás de él y no un marco pegado. */
+.stage-camera.chasing { transition: transform 1.6s cubic-bezier(.2, .7, .25, 1); }
+
+/* Mientras la mueves tú no hay suavizado: con él, la imagen iría por detrás del
+   dedo y se sentiría pegajosa. */
+.stage-camera.manual { transition: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .stage-camera { transition: none; }
@@ -307,6 +341,7 @@ html, body {
   line-height: 1.3;
   text-align: left;
   z-index: 8;
+  transition: border-radius .25s ease, top .25s ease;
   /* es un aviso, no una barrera: con el mundo a pantalla completa se solapa con
      el suelo y no debe robarle los toques (arrastrar la baya, tocar al Pokémon) */
   pointer-events: none;
@@ -322,11 +357,15 @@ html, body {
   border-radius: 16px;
 }
 
-/* con un aviso colgando, la tarjeta se abre por abajo para que se lean como una
-   sola pieza, igual que hace con los estados */
+/* con un aviso colgando, se abre por abajo lo que tenga encima (la tarjeta, o el
+   panel de estados si está desplegado) para que se lean como una sola pieza */
 #screen:has(#banner:not(.hidden)):not(.banner-as-card) #info-card {
   border-bottom: none;
   border-radius: 16px 16px 0 0;
+}
+#screen:has(#banner:not(.hidden)):not(.banner-as-card) #statbar.expanded {
+  border-bottom: none;
+  border-radius: 0;
 }
 
 #banner.banner-tone-info { --tone-color: var(--accent); }
@@ -437,6 +476,7 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   #banner.in, #banner.out { animation: none; }
+  #banner, #info-card, #statbar { transition: none; }
 }
 
 /* mascota */
@@ -521,6 +561,11 @@ html, body {
 
 /* El suelo en perspectiva. Lo dibuja world.js con la misma proyección que usan
    los sprites, así que las líneas y los pies siempre coinciden. */
+/* El terreno se pinta mucho más ancho y más adelante que el trozo que se ve
+   (ver buildFloor). Sin esto el SVG lo recortaría a su caja y al alejar la
+   cámara aparecería el vacío alrededor. */
+.world-floor { overflow: visible; }
+
 .world-floor {
   position: absolute;
   inset: 0;
@@ -552,15 +597,42 @@ html, body {
 }
 /* El desenfoque se concentra junto al horizonte: lo justo para dar profundidad
    sin que los salvajes dejen de reconocerse (y de poder tocarlos). */
-.tilt-shift.far {
-  --tilt-blur: 1.6px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 14%, transparent 42%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 14%, transparent 42%);
+/* Profundidad de campo de verdad: lo enfocado es el plano donde está el Pokémon
+   (--focus-y, que actualiza la cámara), y se difumina lo que queda por delante y
+   por detrás. Antes eran dos bandas fijas arriba y abajo, así que en cuanto se
+   metía al fondo salía desenfocado él, que es justo lo que no puede pasar. */
+.tilt-shift.depth {
+  --tilt-blur: 2.6px;
+  -webkit-mask-image: linear-gradient(to bottom,
+    #000 0%,
+    transparent calc(var(--focus-y, 70%) - 15%),
+    transparent calc(var(--focus-y, 70%) + 15%),
+    #000 100%);
+  mask-image: linear-gradient(to bottom,
+    #000 0%,
+    transparent calc(var(--focus-y, 70%) - 15%),
+    transparent calc(var(--focus-y, 70%) + 15%),
+    #000 100%);
 }
-.tilt-shift.near {
-  --tilt-blur: 1.6px;
-  -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 16%);
-  mask-image: linear-gradient(to top, #000 0%, transparent 16%);
+
+/* Los lados no son profundidad: es para que el suelo no acabe en una línea
+   recta, así que este sí se queda quieto. */
+.tilt-shift.sides {
+  --tilt-blur: 2.2px;
+  -webkit-mask-image: linear-gradient(to right, #000 0%, transparent 16%, transparent 84%, #000 100%);
+  mask-image: linear-gradient(to right, #000 0%, transparent 16%, transparent 84%, #000 100%);
+}
+
+/* Viñeta suave: el aire del escenario se va aclarando hacia los bordes, así que
+   no se ve dónde se acaba el mundo. */
+.stage-fade {
+  position: absolute;
+  inset: -2%;
+  z-index: 260;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 55%, transparent 55%, var(--bg-bottom) 100%);
+  opacity: .85;
 }
 
 /* De noche cae la luz sobre todo el escenario, salvajes incluidos. */
@@ -604,6 +676,13 @@ html, body {
    escalada en modo pixelado, para que sus píxeles midan lo mismo que los del
    Pokémon. sprite-shadow.js rellena estas variables con la posición real de
    los pies, que cambia en cada generación y en cada Pokémon. */
+/* Volteado, la sombra se refleja con el sprite: se coloca a la misma distancia
+   pero del otro lado del centro de la caja. */
+.pet-sprite-wrap.mirrored .pet-shadow,
+.egg-wrap.mirrored .pet-shadow {
+  left: calc(var(--pet-size, 168px) - var(--shadow-x, 50%));
+}
+
 .pet-shadow {
   position: absolute;
   left: var(--shadow-x, 50%);
@@ -1466,4 +1545,28 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .pet-sprite-wrap .pet-img.hurt, .pet-shadow.hurt { animation: none; }
+}
+
+/* --- punteros (solo ratón) --------------------------------------------------
+   En el móvil no existe puntero, así que esto solo se aplica donde hay uno de
+   verdad: el dedo no necesita que le digan qué es tocable. */
+@media (hover: hover) and (pointer: fine) {
+  /* el suelo se puede arrastrar con el botón derecho para mirar alrededor */
+  .pet-stage { cursor: grab; }
+  .stage-camera.manual { cursor: grabbing; }
+
+  /* acariciar */
+  .pet-sprite-wrap.tappable { cursor: pointer; }
+
+  /* recoger lo que ha dejado por el suelo */
+  .leftover-item { cursor: pointer; }
+
+  /* lanzar la baya donde toques */
+  .pet-stage.placing-food { cursor: crosshair; }
+
+  /* durante la partida se lleva con el dedo/ratón, no se toca nada */
+  .pet-stage.playing { cursor: none; }
+
+  .bag-item, .more-btn, .berry-choice, .dex-cell, .pill-btn { cursor: pointer; }
+  .stat-cell { cursor: help; }
 }

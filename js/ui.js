@@ -46,8 +46,11 @@ let playdate = null;
 let eggImgEl = null;
 let pendingIntro = null; // 'hatch' | 'evolve'
 
-const PET_MIN_V = 0.45;
-const PET_MAX_V = 0.98;
+// Hasta dónde puede irse por el suelo. Va de casi el fondo a casi el borde de
+// delante: el sitio lo hay, y con la cámara siguiéndole ya no se pierde de vista
+// por alejarse.
+const PET_MIN_V = 0.22;
+const PET_MAX_V = 1.02;
 
 // Los límites laterales no son fijos: dependen de lo ancho que se vea el
 // Pokémon a esa profundidad, para que nunca se le corte medio cuerpo. Se usa el
@@ -142,6 +145,9 @@ export function initUI(state, deps) {
   infoCardEl.addEventListener('click', () => {
     statsExpanded = !statsExpanded;
     renderStatbar(_state);
+    // el panel tarda en abrirse, así que el aviso se recoloca cuando ya ha crecido
+    positionBanner();
+    setTimeout(positionBanner, 260);
   });
 
   buildBagPanel();
@@ -350,7 +356,8 @@ export function showBanner(message, opts = {}) {
   screenEl.classList.toggle('banner-as-card', !!opts.asCard);
   // Pegado al borde de abajo de la tarjeta, medido: la altura de la tarjeta
   // depende de lo que ponga dentro, así que un número fijo se descuadra solo.
-  bannerEl.style.top = `${opts.asCard ? cardTop : cardTop + cardHeight}px`;
+  bannerAsCard = !!opts.asCard;
+  positionBanner();
 
   const tone = BANNER_TONES[opts.tone] ? opts.tone : 'info';
   // className limpio: se lleva por delante 'hidden' y el 'out' de un aviso que
@@ -439,14 +446,9 @@ export function showBanner(message, opts = {}) {
 function runBannerCountdown(ring, ms) {
   if (!ring) return;
   const fill = ring.querySelector('.ring-fill');
-  const len = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
-  if (!len) return;
-
-  // el path de un <rect> arranca pasada la esquina de arriba a la izquierda, así
-  // que se corre media arista para que la cuenta empiece arriba en el centro
-  const w = parseFloat(fill.getAttribute('width'));
-  const rx = parseFloat(fill.getAttribute('rx'));
-  fill.style.strokeDashoffset = -((w - 2 * rx) / 2);
+  const m = ringMetrics(fill);
+  if (!m) return;
+  const len = m.len;
 
   fill.animate(
     [{ strokeDasharray: `${len} 0` }, { strokeDasharray: `0 ${len}` }],
@@ -497,33 +499,53 @@ function renderInfoCard(state) {
   setXpRing(xpProgress(pet));
 }
 
-// El trazo del borde se recorta con dasharray: un trozo visible de lo que lleva
-// y otro invisible con lo que le falta. La longitud la da el propio rectángulo,
-// que es quien sabe cuánto mide su perímetro con las esquinas redondeadas.
+// --- anillos de progreso -----------------------------------------------------
+//
+// Los usan la experiencia, los avisos y los estados, así que el cómo se dibujan
+// vive en un solo sitio. El trazo se recorta con dasharray: un trozo visible con
+// lo que lleva y otro invisible con lo que le falta.
 //
 // El path de un <rect> arranca en (x + rx, y), o sea justo después de la esquina
-// de arriba a la izquierda. Como debe empezar arriba en el centro, se corre el
-// patrón media arista superior con el dashoffset.
-let xpRing = null;
+// de arriba a la izquierda. Como todos deben empezar arriba en el centro, se
+// corre el patrón media arista superior con el dashoffset.
 
-function measureXpRing(fill) {
+const ringCache = new WeakMap();
+
+function ringMetrics(fill) {
+  const hit = ringCache.get(fill);
+  if (hit) return hit;
+
   const len = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
   if (!len) return null;
   const w = parseFloat(fill.getAttribute('width'));
   const rx = parseFloat(fill.getAttribute('rx'));
-  return { len, start: (w - 2 * rx) / 2 };
+  const metrics = { len, start: (w - 2 * rx) / 2 };
+
+  fill.style.strokeDashoffset = -metrics.start;
+  ringCache.set(fill, metrics);
+  return metrics;
+}
+
+function setRing(fill, progress) {
+  if (!fill) return;
+  const m = ringMetrics(fill);
+  if (!m) return;
+  const done = m.len * Math.max(0, Math.min(1, progress));
+  fill.style.strokeDasharray = `${done} ${m.len - done}`;
 }
 
 function setXpRing(progress) {
-  const fill = infoXpEl.querySelector('.xp-fill');
-  if (!fill) return;
-  if (!xpRing) {
-    xpRing = measureXpRing(fill);
-    if (!xpRing) return;
-    fill.style.strokeDashoffset = -xpRing.start;
-  }
-  const done = xpRing.len * Math.max(0, Math.min(1, progress));
-  fill.style.strokeDasharray = `${done} ${xpRing.len - done}`;
+  setRing(infoXpEl.querySelector('.xp-fill'), progress);
+}
+
+// El aviso cuelga de lo último que haya arriba: de la tarjeta, o del panel de
+// estados si está desplegado. Se recalcula también al desplegarlo, porque si no
+// el aviso que ya estaba puesto se queda debajo y lo tapa.
+let bannerAsCard = false;
+
+function positionBanner() {
+  const statsH = statbarEl.classList.contains('expanded') ? statbarEl.offsetHeight : 0;
+  bannerEl.style.top = `${bannerAsCard ? cardTop : cardTop + cardHeight + statsH}px`;
 }
 
 // La tarjeta solo se puede medir cuando está a la vista: mientras la tapa un
@@ -547,15 +569,16 @@ function renderStatbar(state) {
     hygiene: ITEM_ICONS.hygiene,
     energy: isNight(pet) ? ITEM_ICONS.night : ITEM_ICONS.day,
   };
-  statbarEl.querySelectorAll('.stat-row').forEach((el) => {
+  statbarEl.querySelectorAll('.stat-cell').forEach((el) => {
     const stat = el.dataset.stat;
     el.querySelector('img').src = icons[stat];
 
-    // Barra en vez de cinco puntos: se ve el matiz (un 55% y un 45% ya no son
-    // lo mismo) y el color dice solo si hay que hacer algo.
+    // El anillo alrededor de la chapa, como el de la experiencia: se ve el matiz
+    // (un 55% y un 45% ya no son lo mismo) y el color dice si hay que hacer algo.
     const value = Math.max(0, Math.min(100, values[stat]));
-    el.querySelector('.stat-meter i').style.width = `${value}%`;
+    setRing(el.querySelector('.ring-fill'), value / 100);
     el.dataset.level = value >= 60 ? 'good' : value >= 30 ? 'warn' : 'bad';
+    el.setAttribute('aria-label', `${el.querySelector('.stat-name').textContent}: ${Math.round(value)}%`);
   });
 }
 
@@ -641,8 +664,12 @@ function hopOnce() {
   });
 }
 
+// Mirar a un lado voltea el sprite, y la sombra tiene que voltear con él: se
+// mide de los pies del Pokémon, que no están en el centro de su lienzo, así que
+// al reflejarse el sprite la sombra se quedaba a un lado.
 function faceTo(dir) {
   if (petImgEl) petImgEl.style.setProperty('--flip', dir < 0 ? '1' : '-1');
+  if (petWrapEl) petWrapEl.classList.toggle('mirrored', dir >= 0);
 }
 
 // Un salto de verdad, más alto que el saltito de cada paso: se usa cuando se
@@ -1205,40 +1232,172 @@ function cancelPlaydate() {
 // se acerca y encuadra la acción. El resto del tiempo se queda quieta y entera,
 // que es como se ve mejor el escenario.
 
-const CAM_ZOOM = 1.18;
-const CAM_PAN_LIMIT = 0.13; // como mucho se desplaza este tanto por uno del lienzo
+// La cámara no está fija: le sigue siempre, y con retraso. El acercamiento de
+// base existe solo para poder moverla: al desplazar la capa se destaparían los
+// bordes del escenario, así que se agranda lo justo para que el hueco que deja
+// el desplazamiento siga estando cubierto (de ahí que el tope sea exactamente
+// (zoom - 1) / 2 del lienzo). Cuando hay algo en marcha se acerca más.
+const CAM_ZOOM_IDLE = 1.16;
+const CAM_ZOOM_ACTION = 1.28;
 
-// Adónde mira ahora mismo: null si no hay nada que enfocar. Siempre encuadra al
-// Pokémon, no a lo que esté haciendo: la cámara le sigue a él y le deja en la
-// franja de en medio, que es donde se le ve. Enfocar la baya o el punto entre
-// los dos dejaba al protagonista fuera de sitio.
-function cameraFocus() {
-  if (game) return petPos;
-  if (playdate && playdate.actor) return petPos;
-  return null;
+function cameraZoom() {
+  return (game || (playdate && playdate.actor)) ? CAM_ZOOM_ACTION : CAM_ZOOM_IDLE;
+}
+
+// --- cámara a mano -----------------------------------------------------------
+//
+// Se puede mirar por ahí: dos dedos para mover y pellizcar para acercar; en el
+// ordenador, botón derecho para arrastrar y la ruleta para el zoom. Es solo
+// mirar, así que a los pocos segundos sin tocar nada se vuelve sola al Pokémon.
+//
+// En el móvil se piden dos dedos a propósito: con uno solo chocaría con el doble
+// toque para llamarle y con el arrastre de los minijuegos.
+
+// Se puede alejar bastante más de lo que se acerca: el suelo está dibujado mucho
+// más ancho de lo que se ve, así que hay terreno de sobra que enseñar.
+const CAM_MIN_ZOOM = 0.6;
+const CAM_MAX_ZOOM = 3;
+const CAM_RETURN_MS = 3500;   // lo que aguanta donde la dejes antes de volver
+
+let camManual = null;         // { tx, ty, zoom, until }
+let pinch = null;             // el pellizco en curso
+const camPointers = new Map();
+
+function manualActive() {
+  return camManual && Date.now() < camManual.until;
+}
+
+// Arranca (o prolonga) el control a mano desde donde esté la cámara ahora.
+function touchCamera() {
+  if (!camManual) {
+    const zoom = cameraZoom();
+    const m = new DOMMatrix(cameraEl ? cameraEl.style.transform : '');
+    camManual = { tx: m.e || 0, ty: m.f || 0, zoom: m.a || zoom, until: 0 };
+  }
+  camManual.until = Date.now() + CAM_RETURN_MS;
+  return camManual;
+}
+
+function panCamera(dx, dy) {
+  const cam = touchCamera();
+  cam.tx += dx;
+  cam.ty += dy;
+  updateCamera();
+}
+
+// El zoom tira hacia donde tienes el dedo (o el ratón): se corrige el
+// desplazamiento para que el punto bajo el puntero se quede donde está.
+function zoomCamera(factor, cx, cy) {
+  const cam = touchCamera();
+  const next = Math.max(CAM_MIN_ZOOM, Math.min(CAM_MAX_ZOOM, cam.zoom * factor));
+  const real = next / cam.zoom;
+
+  const w = petStageEl ? petStageEl.clientWidth : 0;
+  const h = petStageEl ? petStageEl.clientHeight : 0;
+  const ox = (cx ?? w / 2) - w / 2;
+  const oy = (cy ?? h / 2) - h / 2;
+
+  cam.tx = ox - (ox - cam.tx) * real;
+  cam.ty = oy - (oy - cam.ty) * real;
+  cam.zoom = next;
+  updateCamera();
+}
+
+function bindCameraGestures(stage) {
+  // el menú del botón derecho estorba: aquí ese botón es para mirar alrededor
+  stage.addEventListener('contextmenu', (ev) => ev.preventDefault());
+
+  stage.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const p = stagePoint(ev);
+    zoomCamera(ev.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y);
+  }, { passive: false });
+
+  stage.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType === 'mouse' && ev.button !== 2) return;
+    camPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (camPointers.size === 2) {
+      const [a, b] = [...camPointers.values()];
+      pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) };
+    }
+  });
+
+  stage.addEventListener('pointermove', (ev) => {
+    const prev = camPointers.get(ev.pointerId);
+    if (!prev) return;
+    const dx = ev.clientX - prev.x;
+    const dy = ev.clientY - prev.y;
+    camPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    // dos dedos: pellizco para el zoom y el arrastre del conjunto para mover
+    if (camPointers.size === 2 && pinch) {
+      const [a, b] = [...camPointers.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.dist > 0) {
+        const rect = petStageEl.getBoundingClientRect();
+        zoomCamera(dist / pinch.dist, (a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top);
+      }
+      pinch.dist = dist;
+      panCamera(dx / 2, dy / 2);
+      return;
+    }
+
+    // un dedo solo mueve si es el botón derecho del ratón
+    if (ev.pointerType === 'mouse') panCamera(dx, dy);
+  });
+
+  const release = (ev) => {
+    camPointers.delete(ev.pointerId);
+    if (camPointers.size < 2) pinch = null;
+    if (camManual) camManual.until = Date.now() + CAM_RETURN_MS;
+  };
+  stage.addEventListener('pointerup', release);
+  stage.addEventListener('pointercancel', release);
+  stage.addEventListener('pointerleave', release);
 }
 
 function updateCamera() {
   if (!cameraEl || !projection || !petStageEl) return;
-
-  const focus = cameraFocus();
-  if (!focus) {
+  if (_state.pet.phase === 'egg' || _state.pet.phase === 'oak') {
     cameraEl.style.transform = '';
     return;
   }
 
   const w = petStageEl.clientWidth;
   const h = petStageEl.clientHeight;
-  const p = projection.project(focus.u, focus.v);
+  const manual = manualActive();
+  const zoom = manual ? camManual.zoom : cameraZoom();
 
-  // Se centra el punto enfocado, pero sin irse tanto como para dejar ver por
-  // dónde acaba el suelo: el desplazamiento va con freno.
-  const maxX = w * CAM_PAN_LIMIT;
-  const maxY = h * CAM_PAN_LIMIT;
-  const tx = Math.max(-maxX, Math.min(maxX, -(p.x - w / 2) * CAM_ZOOM));
-  const ty = Math.max(-maxY, Math.min(maxY, -(p.y - h / 2) * CAM_ZOOM));
+  // Tope: lo que se puede desplazar sin que asome el borde de lo que hay pintado.
+  const maxX = Math.max(0, ((zoom - 1) / 2) * w);
+  const maxY = Math.max(0, ((zoom - 1) / 2) * h);
 
-  cameraEl.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${CAM_ZOOM})`;
+  let tx;
+  let ty;
+  if (manual) {
+    tx = Math.max(-maxX, Math.min(maxX, camManual.tx));
+    ty = Math.max(-maxY, Math.min(maxY, camManual.ty));
+    camManual.tx = tx;
+    camManual.ty = ty;
+  } else {
+    if (camManual) camManual = null;   // se acabó el rato: vuelve con él
+    const p = projection.project(petPos.u, petPos.v);
+    tx = Math.max(-maxX, Math.min(maxX, -(p.x - w / 2) * zoom));
+    ty = Math.max(-maxY, Math.min(maxY, -(p.y - h / 2) * zoom));
+  }
+
+  // A mano va sin suavizado, que si no el dedo arrastra y la imagen llega tarde.
+  // Siguiéndole al pasear va lenta a propósito; en partida se pone al día.
+  // El desenfoque se recoloca para que el plano enfocado sea el del Pokémon: lo
+  // que está más cerca o más lejos que él es lo que se difumina, como una cámara
+  // de verdad. Antes eran dos bandas fijas arriba y abajo, así que si se metía al
+  // fondo se desenfocaba él.
+  const focusY = projection.project(petPos.u, petPos.v).y;
+  cameraEl.style.setProperty('--focus-y', `${((focusY / h) * 100).toFixed(1)}%`);
+
+  cameraEl.classList.toggle('manual', manual);
+  cameraEl.classList.toggle('chasing', !manual && !game && !(playdate && playdate.actor));
+  cameraEl.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${zoom.toFixed(3)})`;
 }
 
 function cameraOptions(stage) {
@@ -1275,6 +1434,9 @@ function leaveHome() {
   stopCall();
   stopWalkTimer();
   destroyPetAnim();
+  camManual = null;
+  pinch = null;
+  camPointers.clear();
   floorEl = null;
 }
 
@@ -1406,6 +1568,7 @@ function buildHomeDOM(state) {
   });
 
   stage.addEventListener('pointerdown', onStageTap);
+  bindCameraGestures(stage);
   camera.appendChild(wrap);
 
   // Los restos también están sobre el suelo, así que los de atrás se ven más
@@ -1426,11 +1589,17 @@ function buildHomeDOM(state) {
 
   // Van al final para quedar por encima de todo lo que hay sobre el suelo: son
   // el desenfoque de la cámara, no una capa del escenario.
-  ['far', 'near'].forEach((zone) => {
+  ['depth', 'sides'].forEach((zone) => {
     const layer = document.createElement('div');
     layer.className = `tilt-shift ${zone}`;
     camera.appendChild(layer);
   });
+
+  // La viñeta cierra el escenario por los bordes, así que va fuera de la capa de
+  // cámara: tiene que quedarse quieta aunque el mundo se mueva.
+  const fade = document.createElement('div');
+  fade.className = 'stage-fade';
+  stage.appendChild(fade);
 
   petStageEl = stage;
   petWrapEl = wrap;

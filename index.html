@@ -65,10 +65,32 @@
     </div>
 
     <div id="statbar">
-      <div class="stat-row" data-stat="hunger"><img alt="" /><span class="stat-name">Hambre</span><span class="stat-meter"><i></i></span></div>
-      <div class="stat-row" data-stat="happiness"><img alt="" /><span class="stat-name">Felicidad</span><span class="stat-meter"><i></i></span></div>
-      <div class="stat-row" data-stat="hygiene"><img alt="" /><span class="stat-name">Higiene</span><span class="stat-meter"><i></i></span></div>
-      <div class="stat-row" data-stat="energy"><img alt="" /><span class="stat-name">Energía</span><span class="stat-meter"><i></i></span></div>
+      <!-- Cada estado es una chapa como la del Pokémon, con el anillo de
+           alrededor haciendo de indicador. Los cuatro caben en una fila. -->
+      <div class="stat-cell" data-stat="hunger" role="img">
+        <svg class="stat-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect class="ring-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+          <rect class="ring-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+        </svg><img alt="" /><span class="stat-name">Hambre</span>
+      </div>
+      <div class="stat-cell" data-stat="happiness" role="img">
+        <svg class="stat-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect class="ring-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+          <rect class="ring-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+        </svg><img alt="" /><span class="stat-name">Felicidad</span>
+      </div>
+      <div class="stat-cell" data-stat="hygiene" role="img">
+        <svg class="stat-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect class="ring-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+          <rect class="ring-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+        </svg><img alt="" /><span class="stat-name">Higiene</span>
+      </div>
+      <div class="stat-cell" data-stat="energy" role="img">
+        <svg class="stat-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect class="ring-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+          <rect class="ring-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+        </svg><img alt="" /><span class="stat-name">Energía</span>
+      </div>
     </div>
 
     <div id="view-root"></div>
