@@ -123,11 +123,32 @@
       </form>
     </div>
 
+    <div id="games-panel" class="sheet hidden">
+      <span class="sheet-grabber"></span>
+      <p class="sheet-title">¿A qué jugáis?</p>
+      <div class="game-list"></div>
+    </div>
+
     <div id="more-panel" class="sheet hidden">
       <span class="sheet-grabber"></span>
-      <button class="more-btn" data-more="pokedex"><i class="fa-solid fa-book"></i> Pokédex</button>
-      <button class="more-btn" data-more="settings"><i class="fa-solid fa-gear"></i> Ajustes</button>
-      <button class="more-btn" data-more="info"><i class="fa-solid fa-circle-info"></i> Info</button>
+      <p class="sheet-title">Más</p>
+      <div class="more-list">
+        <button class="more-btn" data-more="pokedex">
+          <span class="more-icon"><i class="fa-solid fa-book"></i></span>
+          <span class="more-text"><b>Pokédex</b><small>Los que has visto y los que has criado</small></span>
+          <i class="fa-solid fa-chevron-right more-chevron"></i>
+        </button>
+        <button class="more-btn" data-more="settings">
+          <span class="more-icon"><i class="fa-solid fa-gear"></i></span>
+          <span class="more-text"><b>Ajustes</b><small>Mote, avisos y reiniciar la partida</small></span>
+          <i class="fa-solid fa-chevron-right more-chevron"></i>
+        </button>
+        <button class="more-btn" data-more="info">
+          <span class="more-icon"><i class="fa-solid fa-circle-info"></i></span>
+          <span class="more-text"><b>Info</b><small>Qué es esto y de dónde salen los sprites</small></span>
+          <i class="fa-solid fa-chevron-right more-chevron"></i>
+        </button>
+      </div>
     </div>
 
     <nav id="pillnav">

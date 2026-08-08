@@ -1298,68 +1298,106 @@ html, body {
   opacity: .7;
 }
 
-/* Mochila: cuadrícula de cuidados */
-.bag-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.bag-item {
-  position: relative;
+/* Mochila, juegos y "Más": las tres hojas hablan el mismo idioma que los
+   ajustes. Filas con chapa de icono, nombre y una línea de qué hace, en vez de
+   una cuadrícula de botones con el nombre a secas debajo: con seis cuidados ya
+   no se entendía cuál era cuál sin ir uno a uno. */
+.bag-grid,
+.game-list,
+.more-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  padding: 12px 4px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, .75);
-  box-shadow: 0 2px 6px rgba(20, 20, 40, .05);
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  text-align: center;
-  color: var(--ink);
-  transition: transform .12s ease, background .12s ease;
+  gap: 2px;
 }
-.bag-item img {
-  width: 32px;
-  height: 32px;
+
+.bag-item,
+.game-item,
+.more-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-family: var(--font-pixel);
+  text-align: left;
+  color: var(--ink);
+  transition: background .15s ease, transform .1s ease;
+}
+.bag-item + .bag-item,
+.game-item + .game-item,
+.more-btn + .more-btn { border-top: 1px solid rgba(20, 24, 40, .06); border-radius: 12px; }
+
+.bag-item:active,
+.game-item:active,
+.more-btn:active { background: rgba(42, 117, 187, .1); transform: scale(.99); }
+
+/* la misma chapa que la del Pokémon y la de los avisos */
+.bag-icon,
+.game-icon,
+.more-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .85) inset, 0 1px 3px rgba(20, 24, 40, .08);
+}
+.bag-icon img,
+.game-icon img {
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   image-rendering: pixelated;
 }
-.bag-item:active {
-  transform: scale(.94);
-  background: rgba(42, 117, 187, .1);
+.more-icon { color: var(--accent); font-size: 14px; }
+
+.bag-text,
+.game-text,
+.more-text {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
+.bag-text b,
+.game-text b,
+.more-text b { font-size: 12px; font-weight: bold; }
+.bag-text small,
+.game-text small,
+.more-text small { font-size: 9.5px; line-height: 1.3; opacity: .6; }
+
+.more-chevron,
+.game-go { flex: 0 0 auto; font-size: 11px; opacity: .35; }
+.game-go { color: var(--accent); opacity: .6; }
+
 /* aviso cuando hace falta: medicina si está malito, comida si tiene hambre */
-.bag-item.urgent { border-color: rgba(214, 69, 69, .5); }
+.bag-item.urgent .bag-icon {
+  background: color-mix(in srgb, #d64545 16%, rgba(255, 255, 255, .55));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .85) inset, 0 0 0 1.5px rgba(214, 69, 69, .5);
+}
 .bag-item.urgent::after {
   content: '';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
+  top: 10px;
+  left: 36px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #d64545;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .9);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .95);
 }
 
-.more-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: none;
-  border-radius: 14px;
-  background: transparent;
-  font-family: var(--font-pixel);
-  font-size: 13px;
-  text-align: left;
-  color: var(--ink);
+@media (prefers-reduced-motion: reduce) {
+  .bag-item, .game-item, .more-btn { transition: none; }
 }
-.more-btn i { width: 18px; text-align: center; color: var(--accent); }
-.more-btn:active { background: rgba(42, 117, 187, .1); }
 
 /* pill nav flotante inferior */
 #pillnav {

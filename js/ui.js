@@ -106,6 +106,7 @@ const viewRoot = document.getElementById('view-root');
 const bannerEl = document.getElementById('banner');
 const pillnavEl = document.getElementById('pillnav');
 const morePanelEl = document.getElementById('more-panel');
+const gamesPanelEl = document.getElementById('games-panel');
 const bagPanelEl = document.getElementById('bag-panel');
 const scrimEl = document.getElementById('sheet-scrim');
 const berryPanelEl = document.getElementById('berry-panel');
@@ -151,6 +152,7 @@ export function initUI(state, deps) {
   });
 
   buildBagPanel();
+  buildGamesPanel();
 
   pillnavEl.querySelectorAll('.pill-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -235,7 +237,13 @@ function spawnTapBurst(x, y) {
 
 // --- paneles flotantes ------------------------------------------------------
 
-const SHEETS = { bag: bagPanelEl, more: morePanelEl, berry: berryPanelEl, name: namePanelEl };
+const SHEETS = {
+  bag: bagPanelEl,
+  more: morePanelEl,
+  berry: berryPanelEl,
+  name: namePanelEl,
+  games: gamesPanelEl,
+};
 
 function sheetFor(name) {
   return SHEETS[name];
@@ -1803,13 +1811,46 @@ function updateHomeDynamic(state) {
 }
 
 const BAG_ITEMS = [
-  { key: 'feed', label: 'Comida', icon: ITEM_ICONS.feed },
-  { key: 'play', label: 'Jugar', icon: ITEM_ICONS.play },
-  { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene },
-  { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine },
-  { key: 'sleep', label: 'Dormir', icon: ITEM_ICONS.night },
-  { key: 'dodge', label: 'Esquivar', icon: ITEM_ICONS.stone },
+  { key: 'feed', label: 'Comida', icon: ITEM_ICONS.feed, note: 'Lánzale una baya' },
+  { key: 'play', label: 'Jugar', icon: ITEM_ICONS.play, note: 'Elegir minijuego' },
+  { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene, note: 'Dejarlo todo aseado' },
+  { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine, note: 'Curarle si está malo' },
+  { key: 'sleep', label: 'Dormir', icon: ITEM_ICONS.night, note: 'Adelantar la noche' },
 ];
+
+// Los dos minijuegos, detrás de "Jugar": tenerlos sueltos en la Mochila los
+// mezclaba con los cuidados, y no son lo mismo.
+const GAME_LIST = [
+  {
+    key: 'catch',
+    label: 'Atrapar bayas',
+    icon: ITEM_ICONS.feed,
+    note: 'Corre a cogerlas antes de que toquen el suelo.',
+  },
+  {
+    key: 'dodge',
+    label: 'Esquivar piedras',
+    icon: ITEM_ICONS.stone,
+    note: 'Apártate: tres piedras encima y se acabó.',
+  },
+];
+
+function buildGamesPanel() {
+  const list = gamesPanelEl.querySelector('.game-list');
+  GAME_LIST.forEach((entry) => {
+    const btn = document.createElement('button');
+    btn.className = 'game-item';
+    btn.innerHTML = `
+      <span class="game-icon"><img src="${entry.icon}" alt="" /></span>
+      <span class="game-text"><b>${entry.label}</b><small>${entry.note}</small></span>
+      <i class="fa-solid fa-play game-go"></i>`;
+    btn.addEventListener('click', () => {
+      closeSheets();
+      startMinigame(entry.key);
+    });
+    list.appendChild(btn);
+  });
+}
 
 // El contenido de la Mochila se monta una vez; al abrirla solo se actualiza
 // qué hace falta ahora mismo.
@@ -1819,12 +1860,9 @@ function buildBagPanel() {
     const btn = document.createElement('button');
     btn.className = 'bag-item';
     btn.dataset.key = item.key;
-    const img = document.createElement('img');
-    img.src = item.icon;
-    img.alt = '';
-    const span = document.createElement('span');
-    span.textContent = item.label;
-    btn.append(img, span);
+    btn.innerHTML = `
+      <span class="bag-icon"><img src="${item.icon}" alt="" /></span>
+      <span class="bag-text"><b>${item.label}</b><small>${item.note}</small></span>`;
     btn.addEventListener('click', () => onMenuAction(item.key));
     grid.appendChild(btn);
   });
@@ -1852,7 +1890,10 @@ function updateBagPanel(state) {
   // antes de tiempo.
   const sleepBtn = bagPanelEl.querySelector('.bag-item[data-key="sleep"]');
   if (sleepBtn) {
-    sleepBtn.querySelector('span').textContent = night ? 'Despertar' : 'Dormir';
+    sleepBtn.querySelector('b').textContent = night ? 'Despertar' : 'Dormir';
+    sleepBtn.querySelector('small').textContent = night
+      ? 'Terminar la noche antes'
+      : 'Adelantar la noche';
     sleepBtn.querySelector('img').src = night ? ITEM_ICONS.day : ITEM_ICONS.night;
   }
   bagPanelEl.querySelectorAll('.bag-item').forEach((btn) => {
@@ -1865,11 +1906,7 @@ function onMenuAction(key) {
   closeSheets();
   stopMinigame();
   if (key === 'play') {
-    startMinigame('catch');
-    return;
-  }
-  if (key === 'dodge') {
-    startMinigame('dodge');
+    openSheetNamed('games');
     return;
   }
   if (key === 'feed') {
