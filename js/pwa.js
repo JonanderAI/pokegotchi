@@ -14,20 +14,21 @@
 
 import { iconFor, EGG_ICON } from './sprite-resolver.js';
 
-// La misma receta que tools/build-app-icons.py, para que el icono generado aquí
-// y el estático de respaldo se vean igual.
+// El degradado ya solo lo usa el icono de iOS, que no admite transparencia: lo
+// que quede transparente en un apple-touch-icon lo rellena el sistema de negro.
 const GRADIENT_TOP = '#7fd0ff';
 const GRADIENT_BOTTOM = '#2a75bb';
 const FILL_ANY = 0.68;
-const FILL_MASKABLE = 0.52;
 // El favicon va sin fondo, así que el bicho puede ocupar casi todo el lienzo:
 // no hay chapa de la que separarse.
 const FILL_BARE = 0.92;
 
+// Respaldo por si el navegador no se traga el manifiesto generado. Estos sí
+// llevan chapa: son ficheros hechos de antemano (ver tools/build-app-icons.py) y
+// no se pueden dibujar al vuelo.
 const STATIC_ICONS = [
   { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
   { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-  { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ];
 
 let manifestBlobUrl = null;
@@ -148,10 +149,11 @@ function setLink(rel, href, extra = {}) {
 // data URL. Si el navegador no se los traga, detrás van los ficheros estáticos
 // de icons/, así que la app se sigue pudiendo instalar igual.
 async function refreshManifest(state) {
-  const [any192, any512, maskable, bare] = await Promise.all([
-    drawIcon(spriteIconFor(state.pet), 192, FILL_ANY),
-    drawIcon(spriteIconFor(state.pet), 512, FILL_ANY),
-    drawIcon(spriteIconFor(state.pet), 512, FILL_MASKABLE),
+  // Todo sin fondo: el Pokémon suelto, sin la chapa de degradado. Del hueco se
+  // encarga el sistema, que pone el suyo.
+  const [any192, any512, bare] = await Promise.all([
+    drawIcon(spriteIconFor(state.pet), 192, FILL_BARE, { background: false }),
+    drawIcon(spriteIconFor(state.pet), 512, FILL_BARE, { background: false }),
     drawIcon(spriteIconFor(state.pet), 192, FILL_BARE, { background: false }),
   ]);
 
@@ -164,10 +166,13 @@ async function refreshManifest(state) {
     // blob y no encuentra nada.
     start_url: abs('./'),
     scope: abs('./'),
+    // Sin icono "maskable" a propósito: un maskable es, por definición, a sangre,
+    // y Android le pinta detrás el background_color, con lo que la chapa volvería
+    // por otro lado. Dejando solo los "any" transparentes, el lanzador pone su
+    // propio fondo y se ve el Pokémon recortado, que es lo que se busca.
     icons: [
       { src: any192, sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: any512, sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: maskable, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
       ...STATIC_ICONS.map((icon) => ({ ...icon, src: abs(icon.src) })),
     ],
   };
@@ -181,7 +186,9 @@ async function refreshManifest(state) {
   // manifiesto. El favicon va sin fondo; el de iOS no, porque ahí lo que quede
   // transparente lo rellena el sistema con negro.
   setLink('icon', bare, { type: 'image/png' });
-  setLink('apple-touch-icon', any192);
+  drawIcon(spriteIconFor(state.pet), 192, FILL_ANY)
+    .then((plated) => setLink('apple-touch-icon', plated))
+    .catch(() => {});
 }
 
 // Se llama en cada render, pero solo hace algo cuando cambia el Pokémon: al
