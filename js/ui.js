@@ -322,6 +322,11 @@ export function render(state) {
 // una buena noticia o algo que hay que atender antes de leer la frase.
 const MAX_BANNER_ACTIONS = 2;
 
+// Dónde acaba la tarjeta del Pokémon; lo actualiza renderInfoCard, que es quien
+// la tiene delante.
+let cardTop = 18;
+let cardHeight = 84;
+
 const BANNER_TONES = {
   info: 'fa-circle-info',
   good: 'fa-circle-check',
@@ -343,6 +348,9 @@ export function showBanner(message, opts = {}) {
   // y la sustituyen mientras duran (la partida, por ejemplo). Así no hay dos
   // tarjetas a la vez y el aviso manda mientras está pasando algo.
   screenEl.classList.toggle('banner-as-card', !!opts.asCard);
+  // Pegado al borde de abajo de la tarjeta, medido: la altura de la tarjeta
+  // depende de lo que ponga dentro, así que un número fijo se descuadra solo.
+  bannerEl.style.top = `${opts.asCard ? cardTop : cardTop + cardHeight}px`;
 
   const tone = BANNER_TONES[opts.tone] ? opts.tone : 'info';
   // className limpio: se lleva por delante 'hidden' y el 'out' de un aviso que
@@ -356,9 +364,9 @@ export function showBanner(message, opts = {}) {
   // cuenta lo que le queda al aviso antes de irse solo. En los que se quedan
   // puestos no hay nada que contar, así que no sale.
   icon.innerHTML = `
-    <svg class="banner-ring" viewBox="0 0 34 34" aria-hidden="true" focusable="false">
-      <rect class="ring-track" x="1.25" y="1.25" width="31.5" height="31.5" rx="8.75" />
-      <rect class="ring-fill" x="1.25" y="1.25" width="31.5" height="31.5" rx="8.75" />
+    <svg class="banner-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+      <rect class="ring-track" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
+      <rect class="ring-fill" x="1.5" y="1.5" width="41" height="41" rx="10.5" />
     </svg>
     <i class="fa-solid ${opts.icon || BANNER_TONES[tone]}"></i>`;
   bannerEl.appendChild(icon);
@@ -479,6 +487,7 @@ function renderInfoCard(state) {
     return;
   }
   infoLevelEl.classList.remove('hidden');
+  measureInfoCard();
   const info = getEntry(state, pet.speciesId);
   infoIconEl.src = iconFor(pet.speciesId);
   // manda el mote; si no le has puesto ninguno, el nombre de su especie
@@ -515,6 +524,14 @@ function setXpRing(progress) {
   }
   const done = xpRing.len * Math.max(0, Math.min(1, progress));
   fill.style.strokeDasharray = `${done} ${xpRing.len - done}`;
+}
+
+// La tarjeta solo se puede medir cuando está a la vista: mientras la tapa un
+// aviso de partida se queda con lo último que se midió, que es lo que vale.
+function measureInfoCard() {
+  if (!infoCardEl.offsetHeight) return;
+  cardTop = infoCardEl.offsetTop;
+  cardHeight = infoCardEl.offsetHeight;
 }
 
 function renderStatbar(state) {
