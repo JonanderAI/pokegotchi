@@ -52,6 +52,27 @@ export function randomBerries(count) {
   return out;
 }
 
+// Las piedras de evolución que puede traerte un salvaje. El nombre es el de
+// PokeAPI, que es con el que llega la condición de evolución, así que se pueden
+// comparar directamente.
+export const STONES = [
+  { name: 'fire-stone', label: 'Piedra Fuego' },
+  { name: 'water-stone', label: 'Piedra Agua' },
+  { name: 'thunder-stone', label: 'Piedra Trueno' },
+  { name: 'leaf-stone', label: 'Piedra Hoja' },
+  { name: 'moon-stone', label: 'Piedra Lunar' },
+  { name: 'sun-stone', label: 'Piedra Solar' },
+  { name: 'shiny-stone', label: 'Piedra Día' },
+  { name: 'dusk-stone', label: 'Piedra Noche' },
+  { name: 'dawn-stone', label: 'Piedra Alba' },
+];
+
+export function stoneNamed(name) {
+  const found = STONES.find((st) => st.name === name);
+  const label = found ? found.label : 'Piedra';
+  return { name, label, src: `${BASE}/items/items/${name}.png` };
+}
+
 export const ITEM_ICONS = {
   feed: `${BASE}/items/items/berries/oran-berry.png`,
   happiness: `${BASE}/items/items/heart-scale.png`,
@@ -63,4 +84,5 @@ export const ITEM_ICONS = {
   night: `${BASE}/chrome/chrome/time-of-day/night.png`,
   leftovers: `${BASE}/items/items/leftovers.png`,
   stone: `${BASE}/items/items/common-stone.png`,
+  gift: `${BASE}/items/items/leftovers.png`,
 };

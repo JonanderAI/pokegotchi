@@ -86,6 +86,7 @@ export async function getSpeciesInfo(id) {
 
     let evolvesTo = null;
     let evoMinLevel = null;
+    let evoItem = null;
     try {
       const chainRes = await fetch(species.evolution_chain.url);
       if (chainRes.ok) {
@@ -96,6 +97,8 @@ export async function getSpeciesInfo(id) {
           evolvesTo = idFromUrl(next.species.url);
           const detail = next.evolution_details && next.evolution_details[0];
           evoMinLevel = (detail && detail.min_level) || null;
+          // Los que evolucionan con piedra no lo hacen solos: hay que dársela.
+          evoItem = (detail && detail.item && detail.item.name) || null;
         }
       }
     } catch {
@@ -110,6 +113,7 @@ export async function getSpeciesInfo(id) {
       id,
       name: nameEntry ? nameEntry.name : capitalize(poke.name),
       types: poke.types.map((t) => t.type.name),
+      evoItem,
       evolvesTo,
       evoMinLevel,
     };

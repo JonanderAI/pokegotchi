@@ -56,18 +56,6 @@ export function tick(state) {
     events.push({ type: 'sick' });
   }
 
-  if (!pet.mischiefActive && !night && Math.random() < TIMING.mischiefChance) {
-    pet.mischiefActive = true;
-    pet.mischiefDeadline = pet.stageAge + TIMING.mischiefWindow;
-    events.push({ type: 'mischief_start' });
-  }
-  if (pet.mischiefActive && pet.stageAge >= pet.mischiefDeadline) {
-    pet.mischiefActive = false;
-    pet.careBadEvents += 1;
-    pet.happiness = clamp(pet.happiness - 8);
-    events.push({ type: 'mischief_timeout' });
-  }
-
   const stageEvent = advanceStageIfNeeded(state);
   if (stageEvent) events.push(stageEvent);
 
@@ -202,16 +190,6 @@ export function wakeUp(state) {
   return { ok: true, rested };
 }
 
-export function discipline(state) {
-  const pet = state.pet;
-  if (!pet.mischiefActive) return { resolved: false };
-  pet.mischiefActive = false;
-  pet.careGoodEvents += 1;
-  pet.happiness = clamp(pet.happiness + 4);
-  gainXp(pet, 8);
-  return { resolved: true };
-}
-
 export function applyPlayResult(state, success) {
   const pet = state.pet;
   const woke = wakeAtNightPenalty(pet);
@@ -237,13 +215,22 @@ export function petTap(state) {
 
 // Bayas ricas: son las que regalan los salvajes al jugar con ellos.
 const GIFT_BERRIES = ['sitrus', 'lum', 'leppa', 'oran', 'aguav', 'figy', 'mago', 'wiki', 'iapapa'];
-const MAX_GIFTS = 6;
+const MAX_GIFTS = 8;
 const GIFT_CHANCE = 0.45;
+
+// De lo que te regalan, cuánto sale piedra en vez de baya. Son raras a
+// propósito; pero si el que estás criando evoluciona justo con una piedra, los
+// salvajes traen la suya mucho más a menudo: verla caer y no poder usarla nunca
+// sería peor que no verla.
+const STONE_CHANCE = 0.07;
+const STONE_CHANCE_WANTED = 0.4;
 
 // Jugar con un Pokémon salvaje que se ha acercado: es la interacción que más
 // da, porque hay que estar delante y pillarlo mientras anda por ahí. A veces
 // además se despide dejándote una baya.
-export function playWithWild(state) {
+// `wantedStone` es la piedra con la que evoluciona el Pokémon de ahora mismo, si
+// es de esos; la averigua quien llama (la UI, que es quien habla con PokeAPI).
+export function playWithWild(state, { wantedStone = null, stonePool = [] } = {}) {
   const pet = state.pet;
   const woke = wakeAtNightPenalty(pet);
   pet.happiness = clamp(pet.happiness + 14);
@@ -254,14 +241,25 @@ export function playWithWild(state) {
   let gift = null;
   if (!state.gifts) state.gifts = [];
   if (Math.random() < GIFT_CHANCE && state.gifts.length < MAX_GIFTS) {
-    gift = GIFT_BERRIES[Math.floor(Math.random() * GIFT_BERRIES.length)];
+    const stoneChance = wantedStone ? STONE_CHANCE_WANTED : STONE_CHANCE;
+    const traePiedra = stonePool.length && Math.random() < stoneChance;
+
+    if (traePiedra) {
+      // si el tuyo espera una piedra concreta, la mayoría de las veces es esa
+      const name = wantedStone && Math.random() < 0.75
+        ? wantedStone
+        : stonePool[Math.floor(Math.random() * stonePool.length)];
+      gift = { kind: 'stone', name };
+    } else {
+      gift = { kind: 'berry', name: GIFT_BERRIES[Math.floor(Math.random() * GIFT_BERRIES.length)] };
+    }
     state.gifts.push(gift);
   }
   return { woke, gift };
 }
 
 export function takeGift(state, name) {
-  const i = (state.gifts || []).indexOf(name);
+  const i = (state.gifts || []).findIndex((g) => (g && g.name ? g.name : g) === name);
   if (i >= 0) state.gifts.splice(i, 1);
 }
 
@@ -300,7 +298,6 @@ export function currentNeeds(pet) {
   // La evolución manda sobre todo lo demás: es el momento del juego.
   if (pet.pendingEvolution) out.push({ key: 'evolving', urgent: false, action: true });
   if (pet.sick) out.push(need('sick', 0));
-  if (pet.mischiefActive) out.push(need('mischief', 0));
   if (isNight(pet)) out.push(need('sleeping', 100));
   if (pet.poopCount > 0 || pet.hygiene < NEED_LOW) {
     out.push(need('dirty', pet.poopCount > 0 ? Math.min(pet.hygiene, NEED_CRITICAL) : pet.hygiene));

@@ -43,13 +43,6 @@ const NEEDS = [
     body: () => 'Dale una medicina en la Mochila antes de que vaya a peor.',
   },
   {
-    kind: 'mischief',
-    cooldownMin: 20,
-    applies: (pet) => pet.mischiefActive,
-    title: (name) => `${name} está haciendo una travesura`,
-    body: () => 'Regáñale ahora o se le pasará solo y se quedará triste.',
-  },
-  {
     kind: 'hunger',
     cooldownMin: 60,
     applies: (pet) => pet.hunger < 25,

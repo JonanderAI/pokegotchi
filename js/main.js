@@ -7,6 +7,7 @@ import { registerSeen } from './pokedex.js';
 import { initUI, render, showBanner, goHome, playIntro, askNickname } from './ui.js';
 import { registerServiceWorker, syncAppIcon } from './pwa.js';
 import { checkNeeds, notifyEvent } from './notify.js';
+import { playSound } from './sound.js';
 
 const state = loadState();
 
@@ -41,6 +42,7 @@ function handleEvents(events, { quiet = false } = {}) {
         actions: [{ icon: 'fa-pen', label: 'Ponerle nombre', onAction: askNickname }],
       });
       if (!quiet) playIntro('hatch');
+      if (!quiet) playSound('hatch');
       if (!quiet) notifyEvent(state, 'hatched');
       ensureSpeciesRegistered();
     } else if (ev.type === 'sick') {
@@ -49,27 +51,6 @@ function handleEvents(events, { quiet = false } = {}) {
         icon: 'fa-virus',
         desc: 'Dale una medicina desde la Mochila para que se recupere.',
         sticky: true,
-      });
-    } else if (ev.type === 'mischief_start') {
-      notify('¡Está haciendo una travesura!', {
-        tone: 'warn',
-        icon: 'fa-face-grin-tongue-wink',
-        desc: 'Regáñale antes de que se le pase o se llevará un disgusto.',
-        sticky: true,
-        actions: [{
-          icon: 'fa-hand',
-          label: 'Regañar',
-          onAction: () => {
-            care.discipline(state);
-            render(state);
-            saveState(state);
-          },
-        }],
-      });
-    } else if (ev.type === 'mischief_timeout') {
-      notify('Se le pasó la travesura', {
-        tone: 'warn',
-        desc: 'No le regañaste a tiempo y ha perdido algo de felicidad.',
       });
     } else if (ev.type === 'stage_advance') {
       notify(ev.goodCare ? '¡Ha crecido feliz y sano!' : 'Ha crecido a medias', {
@@ -165,8 +146,6 @@ function applyTimeAway() {
   // la ráfaga: lo urgente manda, y si no, se resume el rato que ha pasado solo.
   if (state.pet.phase === 'oak') {
     // la despedida del profesor ya ocupa la pantalla entera
-  } else if (state.pet.mischiefActive) {
-    handleEvents([{ type: 'mischief_start' }]);
   } else if (state.pet.sick) {
     handleEvents([{ type: 'sick' }]);
   } else {

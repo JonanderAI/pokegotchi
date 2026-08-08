@@ -45,6 +45,9 @@ async function tryEvolve(state) {
   const info = await getSpeciesInfo(fromId);
   if (info.offline || !info.evolvesTo) return;
   if (state.pet.speciesId !== fromId) return; // el estado ya cambió mientras esperábamos
+  // Los de piedra no evolucionan por crecer: se quedan esperando a que les des
+  // la suya. Antes evolucionaban solos y la piedra no pintaba nada.
+  if (info.evoItem) return;
   state.pet.pendingEvolution = info.evolvesTo;
 }
 
@@ -80,7 +83,6 @@ export function hatchNewEgg(state) {
   state.pet.energy = 100;
   state.pet.sick = false;
   state.pet.poopCount = 0;
-  state.pet.mischiefActive = false;
   state.pet.awakenedThisNight = false;
   state.pet.careGoodEvents = 0;
   state.pet.careBadEvents = 0;

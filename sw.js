@@ -44,6 +44,7 @@ const SHELL = [
   'js/pokeapi.js',
   'js/pokedex.js',
   'js/pwa.js',
+  'js/sound.js',
   'js/species-pool.js',
   'js/sprite-anim.js',
   'js/sprite-resolver.js',

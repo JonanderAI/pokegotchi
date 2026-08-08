@@ -1,12 +1,13 @@
-import { resolveSprite, iconFor, randomBerries, berryNamed, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
+import { resolveSprite, iconFor, randomBerries, berryNamed, stoneNamed, STONES, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
 import { applyShadow, footOffset, pixelShadowUrl } from './sprite-shadow.js';
 import { animateSprite } from './sprite-anim.js';
-import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, quantizeScale, STEP_U, STEP_V } from './world.js';
+import { createProjection, buildFloor, buildSky, skyPaletteFor, placeActor, placeProp, uRangeFor, quantizeScale, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
 import { getSpeciesInfo } from './pokeapi.js';
-import { getKnownIds, getEntry, registerSeen } from './pokedex.js';
+import { getEntry, registerSeen, countRaised, countSeen, totalSpecies, REGIONS } from './pokedex.js';
 import { isNight, eggProgress, mood, currentNeeds } from './care.js';
 import { levelFromXp } from './state.js';
+import { playSound, setSoundEnabled, soundEnabled } from './sound.js';
 import * as notify from './notify.js';
 
 let _state = null;
@@ -39,6 +40,8 @@ let statsExpanded = false;
 // por la mitad delantera y los Pokémon salvajes salen por el fondo.
 let projection = null;
 let floorEl = null;
+let skyEl = null;
+let skyName = null;
 let petPos = { u: 0.5, v: 0.78 };
 let wild = null;
 let lastWildTapAt = 0;
@@ -180,7 +183,10 @@ export function initUI(state, deps) {
   screenEl.addEventListener('pointerdown', (ev) => {
     const rect = screenEl.getBoundingClientRect();
     spawnTapBurst(ev.clientX - rect.left, ev.clientY - rect.top);
+    playSound('tap');
   });
+
+  setSoundEnabled(_state.settings ? _state.settings.sound !== false : true);
 
   scrimEl.addEventListener('pointerdown', closeSheets);
 
@@ -499,6 +505,7 @@ function renderInfoCard(state) {
   }
   infoLevelEl.classList.remove('hidden');
   measureInfoCard();
+  refreshWantedStone(state);
   const info = getEntry(state, pet.speciesId);
   infoIconEl.src = iconFor(pet.speciesId);
   // manda el mote; si no le has puesto ninguno, el nombre de su especie
@@ -719,6 +726,57 @@ function stepOnce() {
   hopOnce();
 }
 
+// --- piedras de evolución ----------------------------------------------------
+//
+// Se lanzan igual que una baya: eliges el sitio y cae ahí. La diferencia es que
+// solo va a por ella si le sirve; si no, se queda mirándola y la piedra se
+// recupera, que son difíciles de conseguir como para perderla por probar.
+
+function startStoneThrow(name) {
+  cancelPlaydate();
+  cancelFeeding();
+  stopCall();
+  goHome();
+  render(_state);
+  if (!petStageEl) return;
+
+  const stone = stoneNamed(name);
+  const el = document.createElement('img');
+  el.className = 'berry-item hidden';
+  el.src = stone.src;
+  el.alt = stone.label;
+  cameraEl.appendChild(el);
+
+  const shadowEl = document.createElement('div');
+  shadowEl.className = 'berry-shadow hidden';
+  cameraEl.appendChild(shadowEl);
+
+  feeding = {
+    berryEl: el,
+    shadowEl,
+    berry: { ...stone, stone: true },
+    stage: 'aiming',
+    phase: 'aiming',
+    stageEl: petStageEl,
+    pos: { u: 0.5, v: 0.8 },
+    timer: null,
+    steps: 0,
+  };
+
+  petStageEl.classList.add('placing-food');
+  petStageEl.addEventListener('pointerdown', onStagePlace);
+
+  const sirve = wantedStone === name;
+  showBanner(sirve ? '¿Dónde se la dejas?' : 'No le sirve', {
+    tone: sirve ? 'good' : 'info',
+    icon: 'fa-gem',
+    desc: sirve
+      ? 'Toca el suelo y la piedra caerá ahí. Irá a por ella.'
+      : 'A este Pokémon esa piedra no le hace nada, pero puedes enseñársela.',
+    sticky: true,
+  });
+}
+
 // --- llamarle con dos toques -----------------------------------------------
 //
 // Tocando dos veces seguidas un punto del suelo, el Pokémon te hace caso: da dos
@@ -851,7 +909,9 @@ function startFeeding() {
   grid.innerHTML = '';
 
   // Delante las que te han regalado los salvajes: alimentan más y se gastan.
-  const regalos = (_state.gifts || []).map((name) => ({ ...berryNamed(name), gift: true }));
+  const regalos = (_state.gifts || [])
+    .filter((g) => g.kind === 'berry')
+    .map((g) => ({ ...berryNamed(g.name), gift: true }));
   const opciones = [...regalos, ...randomBerries(Math.max(2, 6 - regalos.length))];
 
   opciones.forEach((berry) => {
@@ -981,6 +1041,23 @@ function onStagePlace(ev) {
 }
 
 function dropBerry() {
+  // Una piedra que no le sirve no le mueve del sitio: la mira desde donde está y
+  // se queda como estaba. Es lo que hace que valga la pena buscar la suya.
+  if (feeding.berry && feeding.berry.stone && wantedStone !== feeding.berry.name) {
+    feeding.phase = 'ignored';
+    feeding.stageEl.classList.remove('placing-food');
+    feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
+    showBanner('Ni caso', {
+      icon: 'fa-gem',
+      desc: 'La mira y sigue a lo suyo. Esa piedra no es la que le va.',
+    });
+    feeding.timer = setTimeout(() => {
+      cancelFeeding();
+      scheduleWalk();
+    }, 1600);
+    return;
+  }
+
   feeding.phase = 'walking';
   feeding.steps = 0;
   feeding.stageEl.classList.remove('placing-food');
@@ -996,7 +1073,8 @@ function walkToBerry() {
   const dv = feeding.pos.v - petPos.v;
 
   if ((Math.abs(du) <= REACH_U && Math.abs(dv) <= REACH_V) || feeding.steps >= MAX_FEED_STEPS) {
-    startEating();
+    if (feeding.berry && feeding.berry.stone) takeStone();
+    else startEating();
     return;
   }
   feeding.steps += 1;
@@ -1009,6 +1087,38 @@ function walkToBerry() {
 
   hopOnce();
   feeding.timer = setTimeout(walkToBerry, STEP_MS);
+}
+
+// Llega hasta la piedra, la coge y la evolución se queda pendiente: sale el
+// bocadillo de siempre y evoluciona cuando lo toques, igual que las otras. La
+// piedra se gasta.
+function takeStone() {
+  const el = feeding.berryEl;
+  const sh = feeding.shadowEl;
+  const stone = feeding.berry;
+  feeding = null;
+  if (el) el.remove();
+  if (sh) sh.remove();
+
+  _deps.care.takeGift(_state, stone.name);
+  playSound('evolve');
+  happyJump();
+  for (let i = 0; i < 4; i += 1) setTimeout(spawnHeart, i * 120);
+
+  getSpeciesInfo(_state.pet.speciesId).then((info) => {
+    if (info && info.evolvesTo) _state.pet.pendingEvolution = info.evolvesTo;
+    _deps.saveState(_state);
+    render(_state);
+  }).catch(() => { /* sin red no se puede saber a qué evoluciona */ });
+
+  showBanner('¡La ha cogido!', {
+    tone: 'good',
+    icon: 'fa-gem',
+    desc: `La ${stone.label} ha hecho efecto. Toca el bocadillo para verle cambiar.`,
+  });
+  render(_state);
+  _deps.saveState(_state);
+  scheduleWalk();
 }
 
 function startEating() {
@@ -1034,6 +1144,7 @@ function finishEating() {
   const especial = !!(berry && berry.gift);
   if (especial) _deps.care.takeGift(_state, berry.name);
   const { woke } = _deps.care.feed(_state, { special: especial });
+  playSound('eat');
   showBanner('¡Ñam!', {
     tone: woke ? 'warn' : 'good',
     icon: 'fa-drumstick-bite',
@@ -1044,6 +1155,25 @@ function finishEating() {
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
+}
+
+// La piedra con la que evoluciona el Pokémon de ahora mismo, si es de esos. Se
+// consulta de fondo y se guarda aquí: los salvajes la usan para traerte más a
+// menudo la que te sirve, y la Mochila para decirte cuál le vale.
+let wantedStone = null;
+let wantedStoneFor = null;
+
+function refreshWantedStone(state) {
+  const id = state.pet.speciesId;
+  if (wantedStoneFor === id) return;
+  wantedStoneFor = id;
+  wantedStone = null;
+  if (state.pet.phase === 'egg' || state.pet.phase === 'oak') return;
+
+  getSpeciesInfo(id).then((info) => {
+    if (wantedStoneFor !== id) return;   // ha cambiado mientras preguntábamos
+    wantedStone = (info && info.evoItem) || null;
+  }).catch(() => { /* sin red: nos quedamos sin saberlo, y no pasa nada */ });
 }
 
 // --- Pokémon salvajes ------------------------------------------------------
@@ -1207,12 +1337,18 @@ function finishPlaydate() {
   actor.busy = false;
   actor.leaving = true; // se despide y sigue su camino
 
-  const { woke, gift } = _deps.care.playWithWild(_state);
+  const { woke, gift } = _deps.care.playWithWild(_state, {
+    wantedStone,
+    stonePool: STONES.map((st) => st.name),
+  });
   if (gift) {
-    showBanner('¡Qué bien lo habéis pasado!', {
+    const esPiedra = gift.kind === 'stone';
+    showBanner(esPiedra ? '¡Te ha traído una piedra!' : '¡Qué bien lo habéis pasado!', {
       tone: 'good',
-      icon: 'fa-gift',
-      desc: 'Se despide dejándote una baya: la tienes en la Mochila.',
+      icon: esPiedra ? 'fa-gem' : 'fa-gift',
+      desc: esPiedra
+        ? `Una ${stoneNamed(gift.name).label}. La tienes en la Mochila, en Objetos.`
+        : 'Se despide dejándote una baya: la tienes en la Mochila.',
     });
   } else {
     showBanner('¡Qué bien lo habéis pasado!', {
@@ -1369,6 +1505,21 @@ function bindCameraGestures(stage) {
   stage.addEventListener('pointerleave', release);
 }
 
+// El cielo va con la hora de verdad. Solo se rehace cuando cambia de momento del
+// día, que pasa un puñado de veces al día: repintarlo cada medio segundo sería
+// tirar trabajo.
+function updateSky() {
+  if (!cameraEl || !projection) return;
+  const palette = skyPaletteFor();
+  if (palette.name === skyName && skyEl) return;
+  skyName = palette.name;
+
+  const next = buildSky(projection, palette);
+  if (skyEl) skyEl.replaceWith(next);
+  else cameraEl.prepend(next);
+  skyEl = next;
+}
+
 function updateCamera() {
   if (!cameraEl || !projection || !petStageEl) return;
   if (_state.pet.phase === 'egg' || _state.pet.phase === 'oak') {
@@ -1424,6 +1575,11 @@ function onStageResize() {
   if (!petStageEl || !petStageEl.isConnected) return;
   applyStageMetrics(petStageEl);
   projection = createProjection(petStageEl.clientWidth, petStageEl.clientHeight, cameraOptions(petStageEl));
+
+  const nextSky = buildSky(projection);
+  if (skyEl) skyEl.replaceWith(nextSky);
+  else if (cameraEl) cameraEl.prepend(nextSky);
+  skyEl = nextSky;
 
   const nextFloor = buildFloor(projection);
   if (floorEl) floorEl.replaceWith(nextFloor);
@@ -1509,6 +1665,8 @@ function buildHomeDOM(state) {
 
   applyStageMetrics(stage);
   projection = createProjection(stage.clientWidth, stage.clientHeight, cameraOptions(stage));
+  skyEl = buildSky(projection);
+  camera.appendChild(skyEl);
   floorEl = buildFloor(projection);
   camera.appendChild(floorEl);
 
@@ -1557,6 +1715,7 @@ function buildHomeDOM(state) {
     // contento: la respuesta a que le hagas caso tiene que verse.
     for (let i = 0; i < 3; i += 1) setTimeout(spawnHeart, i * 140);
     setTimeout(happyJump, 340);
+    playSound('happy');
 
     renderStatbar(_state);
     _deps.saveState(_state);
@@ -1664,6 +1823,8 @@ function buildEggScene(state) {
 
   applyStageMetrics(stage);
   projection = createProjection(stage.clientWidth, stage.clientHeight, cameraOptions(stage));
+  skyEl = buildSky(projection);
+  camera.appendChild(skyEl);
   floorEl = buildFloor(projection);
   camera.appendChild(floorEl);
 
@@ -1766,19 +1927,29 @@ function updateEgg(state) {
 
 // Cada estado con su icono y su color. El color hace casi todo el trabajo: se
 // lee de un vistazo sin llegar a mirar qué icono es.
-// Dónde se pone cada globo según cuántos haya, en grados desde la derecha. El
-// primero (el más urgente) siempre arriba; los demás se abren a los lados sin
-// llegar a tocarse.
-const BUBBLE_SLOTS = [
-  [90],
-  [68, 112],
-  [90, 43, 137],
-];
+// Los globos orbitan por la mitad de arriba, repartidos pero no clavados: cada
+// uno cae en su tramo del arco y dentro del tramo se coloca al azar, así que dos
+// veces seguidas no salen igual. El reparto por tramos es lo que impide que se
+// junten dos en el mismo sitio.
+const BUBBLE_ARC = { from: 32, to: 148 };   // grados, de derecha a izquierda
+const BUBBLE_MARGIN = 10;                    // aire dentro de cada tramo
+
+function bubbleAngles(count) {
+  const span = (BUBBLE_ARC.to - BUBBLE_ARC.from) / count;
+  const slots = [];
+  for (let i = 0; i < count; i += 1) {
+    const from = BUBBLE_ARC.from + i * span + BUBBLE_MARGIN;
+    const to = BUBBLE_ARC.from + (i + 1) * span - BUBBLE_MARGIN;
+    slots.push(from + Math.random() * Math.max(0, to - from));
+  }
+  // el más urgente al centro del arco, que es donde primero se mira
+  slots.sort((x, y) => Math.abs(x - 90) - Math.abs(y - 90));
+  return slots;
+}
 
 const NEED_LOOK = {
   evolving: { icon: 'fa-wand-magic-sparkles',   color: '#a78bfa', label: '¡Quiere evolucionar! Tócalo' },
   sick:     { icon: 'fa-virus',                 color: '#c79ae8', label: 'Se encuentra mal' },
-  mischief: { icon: 'fa-face-grin-tongue-wink', color: '#f5c469', label: 'Está haciendo una travesura' },
   sleeping: { icon: 'fa-moon',                  color: '#9aa8dd', label: 'Está durmiendo' },
   dirty:    { icon: 'fa-poo',                   color: '#c9a888', label: 'Esto está sucio' },
   hungry:   { icon: 'fa-drumstick-bite',        color: '#f4a973', label: 'Tiene hambre' },
@@ -1805,6 +1976,7 @@ function startEvolution() {
     if (petStageEl) petStageEl.classList.remove('evolve-charge-stage');
     // El aviso, el fogonazo y el sprite nuevo los recoge el bucle de main.js en
     // cuanto ve pendingEvolutionNotice: aquí solo se confirma el cambio.
+    playSound('evolve');
     if (!_deps.care.commitEvolution(_state)) return;
     _deps.saveState(_state);
   }, EVOLVE_CHARGE_MS);
@@ -1827,6 +1999,7 @@ function renderBubbles(state) {
   if (key !== bubbleKey) {
     bubbleKey = key;
     bubbleEl.innerHTML = '';
+    const angles = bubbleAngles(needs.length);
     needs.forEach((need, i) => {
       const look = NEED_LOOK[need.key];
       const el = document.createElement('div');
@@ -1835,10 +2008,13 @@ function renderBubbles(state) {
       // En órbita alrededor de la cabeza, no apilados: cada uno en su ángulo,
       // todos a la misma distancia y con el rabito apuntando al Pokémon. El más
       // urgente se queda arriba del todo, que es donde antes se mira.
-      const angle = BUBBLE_SLOTS[needs.length - 1][i];
+      const angle = angles[i];
       const rad = (angle * Math.PI) / 180;
       el.style.setProperty('--x', `${Math.cos(rad).toFixed(4)}`);
       el.style.setProperty('--y', `${(-Math.sin(rad)).toFixed(4)}`);
+      // la distancia también varía un poco: en una circunferencia exacta se ve
+      // el compás
+      el.style.setProperty('--orbit-k', (0.9 + Math.random() * 0.25).toFixed(3));
       el.style.setProperty('--i', i); // solo para escalonar el flotar
       el.classList.toggle('urgent', need.urgent);
       el.classList.toggle('calm', need.key === 'sleeping');
@@ -1880,6 +2056,7 @@ function updateHomeDynamic(state) {
   if (petAnim) petAnim.setSpeed(0.6 + mood(pet) * 0.7);
 
   updateCamera();
+  updateSky();
   renderBubbles(state);
 
   if (zEl) zEl.classList.toggle('hidden', !night);
@@ -1981,6 +2158,8 @@ function updateBagPanel(state) {
   // La misma casilla sirve para acostarle y para despertarle: de noche no tiene
   // sentido ofrecer "Dormir", y sin esto no había forma de terminar la noche
   // antes de tiempo.
+  renderGiftsSection(state);
+
   const sleepBtn = bagPanelEl.querySelector('.bag-item[data-key="sleep"]');
   if (sleepBtn) {
     sleepBtn.querySelector('b').textContent = night ? 'Despertar' : 'Dormir';
@@ -1991,6 +2170,42 @@ function updateBagPanel(state) {
   }
   bagPanelEl.querySelectorAll('.bag-item').forEach((btn) => {
     btn.classList.toggle('urgent', !!urgent[btn.dataset.key]);
+  });
+}
+
+// Los regalos de los salvajes viven en su propia sección: las bayas se dan de
+// comer desde ahí igual que las normales, y las piedras se lanzan al suelo para
+// que vaya a por ellas (si le sirven, claro).
+function renderGiftsSection(state) {
+  const box = bagPanelEl.querySelector('.gift-list');
+  const title = bagPanelEl.querySelector('.gift-title');
+  const gifts = state.gifts || [];
+
+  box.classList.toggle('hidden', !gifts.length);
+  title.classList.toggle('hidden', !gifts.length);
+  box.innerHTML = '';
+
+  gifts.forEach((gift) => {
+    const esPiedra = gift.kind === 'stone';
+    const item = esPiedra ? stoneNamed(gift.name) : berryNamed(gift.name);
+    const sirve = esPiedra && wantedStone === gift.name;
+
+    const btn = document.createElement('button');
+    btn.className = `gift-item${sirve ? ' useful' : ''}`;
+    btn.innerHTML = `
+      <span class="bag-icon"><img src="${item.src}" alt="" /></span>
+      <span class="bag-text">
+        <b>${item.label || item.name}</b>
+        <small>${esPiedra
+          ? (sirve ? '¡Le sirve! Lánzasela' : 'A este no le hace nada')
+          : 'Una baya rica, para dársela'}</small>
+      </span>`;
+    btn.addEventListener('click', () => {
+      closeSheets();
+      if (esPiedra) startStoneThrow(gift.name);
+      else startFeeding();
+    });
+    box.appendChild(btn);
   });
 }
 
@@ -2208,6 +2423,7 @@ function resolveBerry(item) {
       game.lives -= 1;
       item.el.remove();
       shakePet();
+      playSound('bad');
       if (game.lives <= 0) endMinigame();
     } else {
       game.score += 1;
@@ -2220,6 +2436,7 @@ function resolveBerry(item) {
   if (encima) {
     game.score += 1;
     _deps.care.catchBerry(_state);
+    playSound('catchItem');
     spawnHeart();
     hopOnce();
     item.el.remove();
@@ -2289,38 +2506,114 @@ function stopMinigame() {
   }
 }
 
+// La Pokédex llega hasta el 386, y casi todo es alcanzable: el huevo puede salir
+// de cualquier especie de base y de ahí evoluciona por su línea. El problema era
+// otro: casi cuatrocientas casillas negras seguidas sin decir cuánto llevas ni
+// por dónde vas. Así que se cuenta el progreso arriba y la rejilla se parte por
+// regiones, que es como está ordenada la Pokédex de verdad.
 function renderPokedex(state) {
   viewRoot.innerHTML = '';
-  const raisedCount = Object.values(state.pokedex).filter((e) => e.raised).length;
 
-  const title = document.createElement('p');
-  title.className = 'dex-title';
-  title.textContent = `Pokédex — ${raisedCount} criados`;
-  viewRoot.appendChild(title);
+  const seen = countSeen(state);
+  const raised = countRaised(state);
+  const total = totalSpecies();
 
-  const grid = document.createElement('div');
-  grid.className = 'dex-grid';
-  getKnownIds().forEach((id) => {
-    const entry = getEntry(state, id);
-    const cell = document.createElement('div');
-    cell.className = `dex-cell${entry ? '' : ' locked'}`;
-    const img = document.createElement('img');
-    img.src = iconFor(id);
-    cell.appendChild(img);
-    cell.addEventListener('click', () => { dexSelected = id; renderPokedex(state); });
-    grid.appendChild(cell);
+  const head = document.createElement('div');
+  head.className = 'dex-head';
+  head.innerHTML = `
+    <p class="dex-title">Pokédex</p>
+    <div class="dex-counts">
+      <span><b>${seen}</b> vistos</span>
+      <span><b>${raised}</b> criados</span>
+      <span class="dex-total">de ${total}</span>
+    </div>
+    <div class="dex-bar"><i style="width:${((seen / total) * 100).toFixed(1)}%"></i></div>`;
+  viewRoot.appendChild(head);
+
+  REGIONS.forEach((region) => {
+    const vistos = countInRange(state, region.from, region.to);
+    const block = document.createElement('section');
+    block.className = 'dex-region';
+
+    const label = document.createElement('p');
+    label.className = 'dex-region-title';
+    label.innerHTML = `${region.name} <small>${vistos} / ${region.to - region.from + 1}</small>`;
+    block.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'dex-grid';
+    for (let id = region.from; id <= region.to; id += 1) {
+      const entry = getEntry(state, id);
+      const cell = document.createElement('button');
+      cell.className = `dex-cell${entry ? '' : ' locked'}${entry && entry.raised ? ' raised' : ''}`;
+      cell.classList.toggle('selected', dexSelected === id);
+      const img = document.createElement('img');
+      img.src = iconFor(id);
+      img.alt = '';
+      cell.appendChild(img);
+      cell.addEventListener('click', () => { dexSelected = id; renderPokedex(state); });
+      grid.appendChild(cell);
+    }
+    block.appendChild(grid);
+    viewRoot.appendChild(block);
   });
-  viewRoot.appendChild(grid);
 
-  if (dexSelected != null) {
-    const entry = getEntry(state, dexSelected);
-    const detail = document.createElement('div');
-    detail.className = 'dex-detail';
-    detail.textContent = entry
-      ? `#${dexSelected} ${entry.name} — ${entry.types.join('/')} (${entry.raised ? 'criado' : 'visto'})`
-      : `#${dexSelected} — ???`;
-    viewRoot.appendChild(detail);
+  if (dexSelected != null) viewRoot.appendChild(buildDexDetail(state, dexSelected));
+}
+
+function countInRange(state, from, to) {
+  let n = 0;
+  for (let id = from; id <= to; id += 1) if (state.pokedex[id]) n += 1;
+  return n;
+}
+
+// La ficha del que has tocado, con la misma cara que el resto: chapa con el
+// sprite, nombre, número y los tipos como etiquetas.
+function buildDexDetail(state, id) {
+  const entry = getEntry(state, id);
+  const card = document.createElement('div');
+  card.className = 'dex-detail';
+
+  const chip = document.createElement('span');
+  chip.className = `dex-detail-icon${entry ? '' : ' locked'}`;
+  chip.innerHTML = `<img src="${iconFor(id)}" alt="" />`;
+
+  const text = document.createElement('div');
+  text.className = 'dex-detail-text';
+
+  const name = document.createElement('p');
+  name.className = 'dex-detail-name';
+  name.textContent = entry ? entry.name : '???';
+
+  const meta = document.createElement('p');
+  meta.className = 'dex-detail-meta';
+  meta.textContent = `#${String(id).padStart(3, '0')}`;
+
+  text.append(name, meta);
+
+  if (entry && entry.types && entry.types.length) {
+    const types = document.createElement('div');
+    types.className = 'dex-types';
+    entry.types.forEach((t) => {
+      const tag = document.createElement('span');
+      tag.className = 'dex-type';
+      tag.textContent = t;
+      types.appendChild(tag);
+    });
+    text.appendChild(types);
   }
+
+  const state_ = document.createElement('span');
+  state_.className = `dex-state${entry ? (entry.raised ? ' raised' : ' seen') : ''}`;
+  state_.innerHTML = entry
+    ? (entry.raised
+      ? '<i class="fa-solid fa-award"></i>'
+      : '<i class="fa-solid fa-eye"></i>')
+    : '<i class="fa-solid fa-question"></i>';
+  state_.title = entry ? (entry.raised ? 'Criado por ti' : 'Visto') : 'Sin descubrir';
+
+  card.append(chip, text, state_);
+  return card;
 }
 
 // Interruptor de los avisos. Va aparte porque tiene que repintarse solo al
@@ -2480,6 +2773,26 @@ function renderSettings() {
   const alerts = settingsGroup('Avisos');
   alerts.box.appendChild(buildNotificationsSetting());
   viewRoot.appendChild(alerts);
+
+  const sound = settingsGroup('Sonido');
+  const soundRow = settingsRow({
+    icon: 'fa-volume-high',
+    label: 'Pitidos',
+    note: 'Los sonidos de comer, saltar y evolucionar.',
+  });
+  const soundSw = settingsSwitch(soundEnabled());
+  soundRow.appendChild(soundSw);
+  soundRow.addEventListener('click', () => {
+    const on = !soundEnabled();
+    setSoundEnabled(on);
+    if (!_state.settings) _state.settings = {};
+    _state.settings.sound = on;
+    _deps.saveState(_state);
+    soundSw.classList.toggle('on', on);
+    if (on) playSound('happy');
+  });
+  sound.box.appendChild(soundRow);
+  viewRoot.appendChild(sound);
 
   const danger = settingsGroup('Partida');
   const resetRow = settingsRow({

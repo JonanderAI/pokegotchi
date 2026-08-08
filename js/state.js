@@ -27,8 +27,6 @@ export const TIMING = {
   nightTicks: 30,   // duración de la noche
   stageDuration: { baby: 50, child: 70, teen: 90, adult: 140 },
   poopInterval: 22,
-  mischiefChance: 0.01,   // por tick, mientras está despierto
-  mischiefWindow: 14,     // ticks para regañar antes de que se resuelva solo
   sicknessCheckChance: 0.05,
 };
 
@@ -80,8 +78,6 @@ function freshPet() {
     sick: false,
     pendingEvolution: null, // especie a la que evolucionará cuando toques el bocadillo
     poopCount: 0,
-    mischiefActive: false,
-    mischiefDeadline: 0,
     awakenedThisNight: false,
     careGoodEvents: 0,
     careBadEvents: 0,
@@ -104,7 +100,7 @@ function freshState() {
     pet: firstPet(),
     pokedex: {}, // { [speciesId]: { seen: true, raised: bool, name, types } }
     gifts: [],   // bayas que te han regalado los salvajes, por su nombre
-    settings: { notifications: false },
+    settings: { notifications: false, sound: true },
     notifiedAt: {}, // { [tipo de aviso]: cuándo se mandó el último }
     lastSeenAt: Date.now(),
   };
@@ -116,8 +112,12 @@ function freshState() {
 function withDefaults(state) {
   if (!state.settings) state.settings = { notifications: false };
   if (typeof state.settings.notifications !== 'boolean') state.settings.notifications = false;
+  if (typeof state.settings.sound !== 'boolean') state.settings.sound = true;
   if (!state.notifiedAt) state.notifiedAt = {};
   if (!state.gifts) state.gifts = [];
+  // Los regalos eran solo nombres de baya; ahora llevan de qué son, porque
+  // también pueden ser piedras. Las partidas de antes se traducen al vuelo.
+  state.gifts = state.gifts.map((g) => (typeof g === 'string' ? { kind: 'berry', name: g } : g));
   return state;
 }
 

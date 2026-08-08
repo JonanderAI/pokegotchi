@@ -563,6 +563,17 @@ html, body {
 
 /* El suelo en perspectiva. Lo dibuja world.js con la misma proyección que usan
    los sprites, así que las líneas y los pies siempre coinciden. */
+/* El cielo va al fondo del todo, detrás del suelo. Se sale de su caja igual que
+   el terreno para que al alejar la cámara siga cubriendo. */
+.world-sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
 /* El terreno se pinta mucho más ancho y más adelante que el trozo que se ve
    (ver buildFloor). Sin esto el SVG lo recortaría a su caja y al alejar la
    cámara aparecería el vacío alrededor. */
@@ -577,8 +588,17 @@ html, body {
 }
 /* el fondo del suelo casi se funde con el cielo: así el borde del terreno no
    se lee como un corte recto, sino como distancia */
-.world-floor .floor-far { stop-color: #e6ebe9; }
-.world-floor .floor-near { stop-color: #e7f0e2; }
+/* El suelo va de casi blanco en el horizonte a un verde apagado en primer plano.
+   Antes los dos extremos eran casi el mismo color, así que el degradado no se
+   notaba y la superficie parecía plana. */
+.world-floor .floor-far { stop-color: #b9d8a4; }
+.world-floor .floor-near { stop-color: #7fb468; }
+.pet-stage.night .world-floor .floor-far { stop-color: #5b6e7e; }
+.pet-stage.night .world-floor .floor-near { stop-color: #3f5a52; }
+
+/* La hierba se apaga de noche igual que todo lo demás. */
+.floor-grass { image-rendering: pixelated; }
+.pet-stage.night .floor-grass { opacity: .45; }
 .world-floor .floor-fill {
   fill: url(#floor-fade);
   stroke: none;
@@ -604,25 +624,27 @@ html, body {
    por detrás. Antes eran dos bandas fijas arriba y abajo, así que en cuanto se
    metía al fondo salía desenfocado él, que es justo lo que no puede pasar. */
 .tilt-shift.depth {
-  --tilt-blur: 2.6px;
+  /* Poco desenfoque y con una zona enfocada bien ancha: con más, la franja por
+     la que se mueve el Pokémon parecía tener niebla encima. */
+  --tilt-blur: 1.4px;
   -webkit-mask-image: linear-gradient(to bottom,
     #000 0%,
-    transparent calc(var(--focus-y, 70%) - 15%),
-    transparent calc(var(--focus-y, 70%) + 15%),
+    transparent calc(var(--focus-y, 70%) - 30%),
+    transparent calc(var(--focus-y, 70%) + 30%),
     #000 100%);
   mask-image: linear-gradient(to bottom,
     #000 0%,
-    transparent calc(var(--focus-y, 70%) - 15%),
-    transparent calc(var(--focus-y, 70%) + 15%),
+    transparent calc(var(--focus-y, 70%) - 30%),
+    transparent calc(var(--focus-y, 70%) + 30%),
     #000 100%);
 }
 
 /* Los lados no son profundidad: es para que el suelo no acabe en una línea
    recta, así que este sí se queda quieto. */
 .tilt-shift.sides {
-  --tilt-blur: 2.2px;
-  -webkit-mask-image: linear-gradient(to right, #000 0%, transparent 16%, transparent 84%, #000 100%);
-  mask-image: linear-gradient(to right, #000 0%, transparent 16%, transparent 84%, #000 100%);
+  --tilt-blur: 1.6px;
+  -webkit-mask-image: linear-gradient(to right, #000 0%, transparent 12%, transparent 88%, #000 100%);
+  mask-image: linear-gradient(to right, #000 0%, transparent 12%, transparent 88%, #000 100%);
 }
 
 /* Viñeta suave: el aire del escenario se va aclarando hacia los bordes, así que
@@ -633,8 +655,8 @@ html, body {
   z-index: 260;
   pointer-events: none;
   background:
-    radial-gradient(120% 90% at 50% 55%, transparent 55%, var(--bg-bottom) 100%);
-  opacity: .85;
+    radial-gradient(135% 105% at 50% 55%, transparent 72%, var(--bg-bottom) 100%);
+  opacity: .5;
 }
 
 /* De noche cae la luz sobre todo el escenario, salvajes incluidos. */
@@ -646,15 +668,10 @@ html, body {
   pointer-events: none;
   background: linear-gradient(180deg, rgba(38, 50, 96, .3) 0%, rgba(28, 38, 78, .17) 100%);
 }
-/* Las matas del suelo: apenas se ven una a una, pero juntas quitan la sensación
-   de estar sobre una superficie lisa de color plano. */
-.floor-patches ellipse { fill: rgba(120, 150, 120, .10); }
-.pet-stage.night .floor-patches ellipse { fill: rgba(90, 110, 160, .12); }
-
 /* difumina el borde del fondo contra el cielo */
-.world-floor .haze-top { stop-color: #e9eef7; stop-opacity: .95; }
-.world-floor .haze-mid { stop-color: #e9eef7; stop-opacity: .55; }
-.world-floor .haze-bottom { stop-color: #e9eef7; stop-opacity: 0; }
+.world-floor .haze-top { stop-color: #cfe4c6; stop-opacity: .7; }
+.world-floor .haze-mid { stop-color: #cfe4c6; stop-opacity: .3; }
+.world-floor .haze-bottom { stop-color: #cfe4c6; stop-opacity: 0; }
 .world-floor .floor-haze {
   fill: url(#floor-haze-grad);
   pointer-events: none;
@@ -844,8 +861,8 @@ html, body {
 .pet-bubble {
   position: absolute;
   --d: 44px;
-  left: calc(var(--x, 0) * var(--orbit) - var(--d) / 2);
-  top: calc(var(--y, -1) * var(--orbit) - var(--d) / 2);
+  left: calc(var(--x, 0) * var(--orbit) * var(--orbit-k, 1) - var(--d) / 2);
+  top: calc(var(--y, -1) * var(--orbit) * var(--orbit-k, 1) - var(--d) / 2);
   width: var(--d);
   height: var(--d);
   display: flex;
@@ -871,17 +888,50 @@ html, body {
   background: #fff;
   box-shadow: 0 2px 5px -2px rgba(20, 24, 40, .28);
 }
+/* Los dos puntos suben del Pokémon al globo, creciendo por el camino y
+   desviándose a un lado, que es lo que les da la curva. Se ven durante todo el
+   trayecto: solo aparecen al salir y se apagan al llegar. */
 .pet-bubble::before {
-  width: 10px;
-  height: 10px;
-  margin: -5px;
-  transform: translate(calc(var(--x, 0) * -26px), calc(var(--y, -1) * -26px));
+  width: 11px;
+  height: 11px;
+  margin: -5.5px;
+  --from: -48px;
+  --to: -18px;
+  --bend: 8px;
+  animation: tail-travel 2.6s linear infinite;
 }
 .pet-bubble::after {
-  width: 6px;
-  height: 6px;
-  margin: -3px;
-  transform: translate(calc(var(--x, 0) * -38px), calc(var(--y, -1) * -38px));
+  width: 7px;
+  height: 7px;
+  margin: -3.5px;
+  --from: -48px;
+  --to: -18px;
+  --bend: -7px;
+  animation: tail-travel 2.6s linear 1.3s infinite;
+}
+
+/* El desvío va en perpendicular al radio (se cambian x e y de sitio y se le da
+   la vuelta a una), así que la curva sale igual mire donde mire el globo. */
+@keyframes tail-travel {
+  0% {
+    transform: translate(calc(var(--x, 0) * var(--from)), calc(var(--y, -1) * var(--from)))
+               scale(.35);
+    opacity: 0;
+  }
+  12% { opacity: 1; }
+  50% {
+    transform: translate(
+                 calc(var(--x, 0) * (var(--from) + var(--to)) / 2 + var(--y, -1) * var(--bend)),
+                 calc(var(--y, -1) * (var(--from) + var(--to)) / 2 - var(--x, 0) * var(--bend)))
+               scale(.8);
+    opacity: 1;
+  }
+  86% { opacity: 1; }
+  100% {
+    transform: translate(calc(var(--x, 0) * var(--to)), calc(var(--y, -1) * var(--to)))
+               scale(1.1);
+    opacity: 0;
+  }
 }
 
 /* cuando todo va bien o está dormido no hace falta que grite */
@@ -1693,4 +1743,59 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .egg-glow, .egg-wrap img.egg-poke, .egg-sparkle { animation: none; }
+}
+
+/* --- objetos de la Mochila --------------------------------------------------
+   Lo que te regalan los salvajes va aparte de los cuidados: son cosas que
+   tienes, no acciones que puedes hacer. Misma fila, con la chapa marcada cuando
+   la piedra le sirve al que estás criando. */
+.gift-title { margin-top: 8px !important; }
+
+.gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.gift-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-family: var(--font-pixel);
+  text-align: left;
+  color: var(--ink);
+  transition: background .15s ease;
+}
+.gift-item:active { background: rgba(42, 117, 187, .1); }
+
+/* la que le vale se marca: son raras y no hay que ir probando una a una */
+.gift-item.useful .bag-icon {
+  background: color-mix(in srgb, #2fb37a 18%, rgba(255, 255, 255, .55));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .85) inset, 0 0 0 1.5px rgba(47, 179, 122, .55);
+}
+.gift-item.useful .bag-text small { color: #2fb37a; opacity: .95; }
+
+@media (prefers-reduced-motion: reduce) { .gift-item { transition: none; } }
+
+/* Las nubes cruzan el cielo despacio. Cada fila lleva dos copias seguidas y se
+   desplaza el ancho de una, así que el bucle no tiene costura. */
+@keyframes cloud-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.sky-cloud-row { animation: cloud-drift var(--drift, 240s) linear infinite; }
+
+/* los rayos del sol giran muy despacio, lo justo para que no parezca una calca */
+@keyframes sun-spin { to { transform: rotate(360deg); } }
+.sky-rays { animation: sun-spin 90s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sky-cloud-row, .sky-rays { animation: none; }
 }

@@ -35,3 +35,20 @@ export function getEntry(state, id) {
 export function countRaised(state) {
   return Object.values(state.pokedex).filter((e) => e.raised).length;
 }
+
+export function countSeen(state) {
+  return Object.keys(state.pokedex).length;
+}
+
+export function totalSpecies() {
+  return MAX_DEX_ID - MIN_DEX_ID + 1;
+}
+
+// Las tres generaciones que caben en el juego: hasta donde llegan los sprites
+// animados de Emerald. Partir la rejilla por regiones la vuelve algo que se
+// puede recorrer, en vez de una pared de casi cuatrocientas casillas.
+export const REGIONS = [
+  { name: 'Kanto', from: 1, to: 151 },
+  { name: 'Johto', from: 152, to: 251 },
+  { name: 'Hoenn', from: 252, to: MAX_DEX_ID },
+];
