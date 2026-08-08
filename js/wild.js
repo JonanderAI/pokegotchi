@@ -9,7 +9,7 @@ import { applyShadow, footOffset } from './sprite-shadow.js';
 import { placeActor, STEP_U, STEP_V } from './world.js';
 import { SPECIES_POOL } from './species-pool.js';
 
-const MAX_WILD = 2;
+const MAX_WILD = 3;
 const STEP_MS = 620;          // andan un poco más lentos que la mascota
 
 // De vez en cuando, en lugar de un salvaje suelto, aparece una familia: un
@@ -41,25 +41,45 @@ const FAMILIES = [
   { parent: 257, baby: 255 },  // Blaziken / Torchic
   { parent: 260, baby: 258 },  // Swampert / Mudkip
 ];
-// Aparecen con cuentagotas: un salvaje tiene que ser un acontecimiento, no
-// ruido de fondo.
-const SPAWN_MIN_MS = 25000;
-const SPAWN_MAX_MS = 60000;
-const LIFE_STEPS = [14, 30];  // pasos que se quedan antes de irse
+// Con cuentagotas, pero no tanto: a 25-60 segundos y viviendo diez, podías
+// estar un buen rato sin ver ninguno, y el temporizador se reinicia cada vez que
+// se recarga la página, así que jugando a ratos cortos no aparecía nunca.
+const SPAWN_MIN_MS = 11000;
+const SPAWN_MAX_MS = 26000;
+const LIFE_STEPS = [26, 52];  // pasos que se quedan antes de irse
 const FADE_MS = 400;
+
+// Hasta dónde deambulan en profundidad. Va con la zona por la que se mueve tu
+// Pokémon (ver PET_MIN_V y PET_MAX_V en ui.js): si ellos llegan al primer plano
+// y los salvajes no, se nota que hay una valla invisible.
+const WILD_MIN_V = 0.03;
+const WILD_MAX_V = 1.12;
 
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
 }
 
-// Los salvajes salen del fondo, nunca en primer plano: el protagonista es la
-// mascota.
+// Entran por cualquier borde, no solo por el fondo: por los lados a cualquier
+// profundidad, por detrás del todo o por delante, cruzando por primer plano.
+// Saliendo siempre del mismo sitio, el escenario se sentía plano.
 function spawnPosition() {
-  const fromLeft = Math.random() < 0.5;
+  const side = Math.floor(Math.random() * 4);
+
+  if (side === 0 || side === 1) {
+    const fromLeft = side === 0;
+    return {
+      u: fromLeft ? 0.02 : 0.98,
+      v: randomBetween(WILD_MIN_V, WILD_MAX_V),
+      dir: fromLeft ? 1 : -1,
+    };
+  }
+
+  // por detrás o por delante: entran a media altura y se cruzan hacia un lado
+  const goRight = Math.random() < 0.5;
   return {
-    u: fromLeft ? 0.02 : 0.98,
-    v: randomBetween(0.05, 0.55),
-    dir: fromLeft ? 1 : -1,
+    u: randomBetween(0.15, 0.85),
+    v: side === 2 ? WILD_MIN_V : WILD_MAX_V,
+    dir: goRight ? 1 : -1,
   };
 }
 
@@ -215,7 +235,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
       if (!point) return;
       const off = baby.offset || { u: 0, v: 0 };
       baby.pos.u = Math.min(0.98, Math.max(0.02, point.u + off.u));
-      baby.pos.v = Math.min(0.75, Math.max(0.02, point.v + off.v));
+      baby.pos.v = Math.min(WILD_MAX_V, Math.max(WILD_MIN_V, point.v + off.v));
       face(baby, point.dir);
       hop(baby);
       place(baby);
@@ -281,7 +301,7 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
 
         actor.pos.u = Math.min(0.98, Math.max(0.02, actor.pos.u + actor.dir * STEP_U));
         if (Math.random() < 0.3) {
-          actor.pos.v = Math.min(0.7, Math.max(0.02, actor.pos.v + (Math.random() < 0.5 ? -1 : 1) * STEP_V));
+          actor.pos.v = Math.min(WILD_MAX_V, Math.max(WILD_MIN_V, actor.pos.v + (Math.random() < 0.5 ? -1 : 1) * STEP_V));
         }
         face(actor, actor.dir);
         hop(actor);

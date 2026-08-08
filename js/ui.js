@@ -1547,9 +1547,12 @@ function updateCamera() {
   const roamX = Math.max(0, 1.5 * w * zoom - w / 2);
   const roamY = Math.max(0, 1.5 * h * zoom - h / 2);
 
-  // Siguiéndole se mueve menos: lo justo para encuadrarle sin despegarse.
-  const maxX = Math.min(roamX, Math.max(0, ((zoom - 1) / 2) * w));
-  const maxY = Math.min(roamY, Math.max(0, ((zoom - 1) / 2) * h));
+  // Siguiéndole se mueve hasta el mismo tope: antes se le daba solo lo que
+  // sobraba del zoom ((zoom-1)/2 del lienzo), que con el acercamiento de reposo
+  // eran treinta píxeles, y por eso no llegaba a centrarle nunca. Ese límite
+  // venía de cuando el mundo medía justo la ventana.
+  const maxX = roamX;
+  const maxY = roamY;
 
   let tx;
   let ty;
@@ -1560,9 +1563,14 @@ function updateCamera() {
     camManual.ty = ty;
   } else {
     if (camManual) camManual = null;   // se acabó el rato: vuelve con él
+    // project() da el punto donde pisa, y el sprite sale hacia arriba desde ahí:
+    // apuntando a los pies, el Pokémon queda en la mitad de arriba del encuadre.
+    // Se sube el objetivo a la altura de su cuerpo.
     const p = projection.project(petPos.u, petPos.v);
+    const alto = petSize * quantizeScale(p.scale);
+    const objetivoY = p.y - alto * 0.3;
     tx = Math.max(-maxX, Math.min(maxX, -(p.x - w / 2) * zoom));
-    ty = Math.max(-maxY, Math.min(maxY, -(p.y - h / 2) * zoom));
+    ty = Math.max(-maxY, Math.min(maxY, -(objetivoY - h / 2) * zoom));
   }
 
   // A mano va sin suavizado, que si no el dedo arrastra y la imagen llega tarde.
