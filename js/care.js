@@ -165,6 +165,8 @@ export function giveMedicine(state) {
 // Por debajo de esto se le puede mandar a la cama: si va sobrado de energía no
 // hay quien lo acueste, igual que en la vida real.
 const SLEEPY_ENERGY = 65;
+// A partir de aquí se le puede despertar sin que le siente mal.
+const RESTED_ENERGY = 85;
 
 // Mandarle a dormir adelanta la noche: se salta lo que quedaba de día y empieza
 // ya el tramo nocturno, que es cuando recupera energía. No acorta la noche.
@@ -179,6 +181,25 @@ export function sendToSleep(state) {
   pet.careGoodEvents += 1;
   gainXp(pet, 6);
   return { ok: true };
+}
+
+// Y despertarle hace lo contrario: se salta lo que quedaba de noche. Si aún no
+// ha descansado se lleva un disgusto, que es lo que hace que mandarle a dormir
+// y despertarle no sean gratis los dos.
+export function wakeUp(state) {
+  const pet = state.pet;
+  if (!isNight(pet)) return { ok: false, reason: 'already_awake' };
+
+  const cycleLen = TIMING.dayTicks + TIMING.nightTicks;
+  pet.cycleTick = (Math.floor(pet.cycleTick / cycleLen) + 1) * cycleLen;
+
+  const rested = pet.energy >= RESTED_ENERGY;
+  if (!rested) {
+    pet.happiness = clamp(pet.happiness - 6);
+    pet.careBadEvents += 1;
+  }
+  pet.awakenedThisNight = false;
+  return { ok: true, rested };
 }
 
 export function discipline(state) {

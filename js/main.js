@@ -38,8 +38,7 @@ function handleEvents(events, { quiet = false } = {}) {
         tone: 'good',
         icon: 'fa-egg',
         desc: 'Ya tienes un Pokémon al que cuidar. Ponle un mote si quieres.',
-        actionLabel: 'Ponerle nombre',
-        onAction: askNickname,
+        actions: [{ icon: 'fa-pen', label: 'Ponerle nombre', onAction: askNickname }],
       });
       if (!quiet) playIntro('hatch');
       if (!quiet) notifyEvent(state, 'hatched');
@@ -57,12 +56,15 @@ function handleEvents(events, { quiet = false } = {}) {
         icon: 'fa-face-grin-tongue-wink',
         desc: 'Regáñale antes de que se le pase o se llevará un disgusto.',
         sticky: true,
-        actionLabel: 'Regañar',
-        onAction: () => {
-          care.discipline(state);
-          render(state);
-          saveState(state);
-        },
+        actions: [{
+          icon: 'fa-hand',
+          label: 'Regañar',
+          onAction: () => {
+            care.discipline(state);
+            render(state);
+            saveState(state);
+          },
+        }],
       });
     } else if (ev.type === 'mischief_timeout') {
       notify('Se le pasó la travesura', {

@@ -1670,12 +1670,22 @@ function updateBagPanel(state) {
   if (!usable) return;
 
   // un punto rojo en lo que toca: medicina si está malito, comida si tiene hambre
+  const night = isNight(pet);
   const urgent = {
     medicine: pet.sick,
     feed: pet.hunger < 35,
     clean: pet.poopCount >= 2,
-    sleep: pet.energy < 30 && !isNight(pet),
+    sleep: pet.energy < 30 && !night,
   };
+
+  // La misma casilla sirve para acostarle y para despertarle: de noche no tiene
+  // sentido ofrecer "Dormir", y sin esto no había forma de terminar la noche
+  // antes de tiempo.
+  const sleepBtn = bagPanelEl.querySelector('.bag-item[data-key="sleep"]');
+  if (sleepBtn) {
+    sleepBtn.querySelector('span').textContent = night ? 'Despertar' : 'Dormir';
+    sleepBtn.querySelector('img').src = night ? ITEM_ICONS.day : ITEM_ICONS.night;
+  }
   bagPanelEl.querySelectorAll('.bag-item').forEach((btn) => {
     btn.classList.toggle('urgent', !!urgent[btn.dataset.key]);
   });
@@ -1698,7 +1708,22 @@ function onMenuAction(key) {
     return;
   }
   if (key === 'sleep') {
-    const { ok, reason } = care.sendToSleep(_state);
+    if (isNight(_state.pet)) {
+      const { rested } = care.wakeUp(_state);
+      showBanner(rested ? '¡Buenos días!' : 'Le has despertado', {
+        tone: rested ? 'good' : 'warn',
+        icon: 'fa-sun',
+        desc: rested
+          ? 'Ya había descansado bastante, así que se levanta como nuevo.'
+          : 'Todavía le faltaba sueño y se ha llevado un disgusto.',
+      });
+      render(_state);
+      saveState(_state);
+      return;
+    }
+    // aquí ya se sabe que es de día, así que el único "no" posible es que no
+    // tenga sueño
+    const { ok } = care.sendToSleep(_state);
     if (ok) {
       showBanner('Buenas noches', {
         tone: 'good',
@@ -1706,11 +1731,9 @@ function onMenuAction(key) {
         desc: 'Se acuesta antes de tiempo. Mientras duerme recupera energía.',
       });
     } else {
-      showBanner(reason === 'already' ? 'Ya está durmiendo' : 'No tiene sueño', {
+      showBanner('No tiene sueño', {
         icon: 'fa-moon',
-        desc: reason === 'already'
-          ? 'Déjale descansar: si le despiertas ahora se llevará un disgusto.'
-          : 'Todavía va sobrado de energía. Cánsale jugando un rato.',
+        desc: 'Todavía va sobrado de energía. Cánsale jugando un rato.',
       });
     }
   } else if (key === 'clean') care.clean(_state);
