@@ -68,6 +68,7 @@ export function sendToOak(state, pokedex) {
 
 export function hatchNewEgg(state) {
   state.pet.phase = 'egg';
+  state.pet.starter = false;   // el inicial es solo el primero
   state.pet.pendingEvolution = null;
   state.pet.speciesId = randomSpeciesId();
   state.pet.stageAge = 0;
@@ -90,6 +91,8 @@ export function hatchNewEgg(state) {
 // 1 y el 493 vía PokeAPI. Solo se aplica si el huevo sigue sin eclosionar.
 export async function refineEggSpecies(state) {
   if (state.pet.phase !== 'egg') return false;
+  // al inicial no se le toca: ya se eligió a propósito
+  if (state.pet.starter) return false;
   const id = await pickBaseStageSpeciesId();
   if (id && state.pet.phase === 'egg') {
     state.pet.speciesId = id;

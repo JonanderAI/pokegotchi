@@ -144,6 +144,38 @@ export function buildFloor(proj) {
   ].join(' '));
   svg.appendChild(ground);
 
+  // Textura: matas sueltas repartidas por el suelo. Se colocan en coordenadas del
+  // mundo y se proyectan como todo lo demás, así que al fondo salen pequeñas y
+  // juntas y cerca grandes y separadas. Una trama plana encima habría matado la
+  // perspectiva, que es lo único que vende que esto es un suelo.
+  //
+  // El reparto es pseudoaleatorio pero fijo: con Math.random las matas cambiarían
+  // de sitio cada vez que se redibuja el suelo (al girar el móvil, por ejemplo).
+  const patches = document.createElementNS(SVG_NS, 'g');
+  patches.setAttribute('class', 'floor-patches');
+  let seed = 1337;
+  const rnd = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+
+  for (let i = 0; i < 90; i += 1) {
+    const u = U_MIN + rnd() * (U_MAX - U_MIN);
+    const v = rnd() * V_NEAR;
+    const p = proj.project(u, v);
+    if (p.y < far.y) continue;             // por encima del horizonte no hay suelo
+
+    const rx = (5 + rnd() * 11) * p.scale;
+    const blob = document.createElementNS(SVG_NS, 'ellipse');
+    blob.setAttribute('cx', p.x.toFixed(1));
+    blob.setAttribute('cy', p.y.toFixed(1));
+    blob.setAttribute('rx', rx.toFixed(1));
+    blob.setAttribute('ry', (rx * 0.42).toFixed(1));
+    blob.setAttribute('opacity', (0.5 + rnd() * 0.5).toFixed(2));
+    patches.appendChild(blob);
+  }
+  svg.appendChild(patches);
+
   // Neblina donde el suelo se junta con el fondo, para que el borde del terreno
   // no se vea como un corte recto.
   const haze = document.createElementNS(SVG_NS, 'rect');

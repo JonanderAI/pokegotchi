@@ -20,6 +20,15 @@ const VERSION = 'v1';
 const SHELL_CACHE = `pokegotchi-shell-${VERSION}`;
 const RUNTIME_CACHE = `pokegotchi-runtime-${VERSION}`;
 
+// En local no se sirve nada de la caché. La estrategia de abajo (dar lo
+// guardado y refrescar por detrás) está bien para quien juega, pero
+// desarrollando significa que cada cambio tarda dos recargas en verse, y eso
+// acaba haciéndote creer que algo no funciona cuando en realidad estás mirando
+// la versión de antes. El service worker se sigue registrando, así que instalar
+// y los avisos se pueden probar igual.
+const DEV_HOSTS = ['localhost', '127.0.0.1'];
+const DEV = DEV_HOSTS.includes(self.location.hostname);
+
 // Lo que hace falta para que la primera pantalla se pinte estando sin conexión.
 // Los sprites no entran: son miles de ficheros y se van guardando conforme el
 // juego los pide.
@@ -99,6 +108,9 @@ async function staleWhileRevalidate(cacheName, request) {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+
+  // En local se deja pasar todo a la red: lo que hay en el disco es lo que se ve.
+  if (DEV) return;
 
   const url = new URL(request.url);
 

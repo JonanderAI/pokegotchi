@@ -44,6 +44,7 @@ let wild = null;
 let lastWildTapAt = 0;
 let playdate = null;
 let eggImgEl = null;
+let eggPos = { u: 0.5, v: 0.82 };
 let pendingIntro = null; // 'hatch' | 'evolve'
 
 // Hasta dónde puede irse por el suelo. Va de casi el fondo a casi el borde de
@@ -493,7 +494,7 @@ function renderInfoCard(state) {
     infoStageEl.textContent = 'Huevo';
     infoLevelEl.textContent = '';
     infoLevelEl.classList.add('hidden');
-    setXpRing(0);
+    // el anillo lo lleva updateEgg, que es quien sabe cuánto le queda
     return;
   }
   infoLevelEl.classList.remove('hidden');
@@ -552,6 +553,10 @@ function setXpRing(progress) {
 let bannerAsCard = false;
 
 function positionBanner() {
+  // Se mide aquí y no solo al pintar la tarjeta: los avisos del arranque (la
+  // travesura pendiente, el "bienvenido de vuelta") salen antes del primer
+  // render, y con los valores por defecto quedaban un buen hueco por debajo.
+  measureInfoCard();
   const statsH = statbarEl.classList.contains('expanded') ? statbarEl.offsetHeight : 0;
   bannerEl.style.top = `${bannerAsCard ? cardTop : cardTop + cardHeight + statsH}px`;
 }
@@ -1426,7 +1431,8 @@ function onStageResize() {
   floorEl = nextFloor;
 
   if (petAnim) petAnim.reflow();
-  placePet();
+  if (_state.pet.phase === 'egg') placeEgg();
+  else placePet();
   leftoverEls.forEach((el, i) => placeProp(el, projection, LEFTOVER_SLOTS[i], propSize));
   if (feeding) placeProp(feeding.berryEl, projection, feeding.pos, propSize);
   if (wild) wild.reflow();
@@ -1481,26 +1487,7 @@ function buildHomeDOM(state) {
   const pet = state.pet;
 
   if (pet.phase === 'egg') {
-    const wrap = document.createElement('div');
-    wrap.className = 'egg-wrap';
-    const shadow = document.createElement('div');
-    shadow.className = 'pet-shadow';
-    wrap.appendChild(shadow);
-    const img = document.createElement('img');
-    img.src = EGG_SPRITE;
-    img.onerror = () => {
-      img.src = EGG_ICON;
-      applyShadow(wrap, img, EGG_ICON);
-    };
-    eggImgEl = img;
-    wrap.appendChild(img);
-    const label = document.createElement('p');
-    label.className = 'pet-substatus';
-    label.textContent = 'Un huevo misterioso... ¡está a punto de eclosionar!';
-    viewRoot.appendChild(wrap);
-    viewRoot.appendChild(label);
-    applyShadow(wrap, img, EGG_SPRITE);
-    updateEgg(state);
+    buildEggScene(state);
     return;
   }
 
@@ -1662,13 +1649,119 @@ function playPendingIntro(wrap, img) {
   setTimeout(() => burst.remove(), 700);
 }
 
-// Cuanto menos le queda al huevo, más rápido y más fuerte se remueve.
+// El huevo se pone en el mismo escenario que el Pokémon (suelo, perspectiva,
+// desenfoque, viñeta) en vez de flotar centrado en una pantalla en blanco: es el
+// mismo sitio donde va a nacer, así que la eclosión no cambia de decorado.
+function buildEggScene(state) {
+  const stage = document.createElement('div');
+  stage.className = 'pet-stage egg-scene';
+  viewRoot.appendChild(stage);
+
+  const camera = document.createElement('div');
+  camera.className = 'stage-camera';
+  stage.appendChild(camera);
+  cameraEl = camera;
+
+  applyStageMetrics(stage);
+  projection = createProjection(stage.clientWidth, stage.clientHeight, cameraOptions(stage));
+  floorEl = buildFloor(projection);
+  camera.appendChild(floorEl);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'egg-wrap';
+
+  const shadow = document.createElement('div');
+  shadow.className = 'pet-shadow';
+  wrap.appendChild(shadow);
+
+  // El halo crece según se acerca la eclosión: es lo que avisa de que va a pasar
+  // algo sin tener que leer nada.
+  const glow = document.createElement('div');
+  glow.className = 'egg-glow';
+  wrap.appendChild(glow);
+
+  const img = document.createElement('img');
+  img.src = EGG_SPRITE;
+  img.onerror = () => {
+    img.src = EGG_ICON;
+    applyShadow(wrap, img, EGG_ICON);
+  };
+  eggImgEl = img;
+  wrap.appendChild(img);
+
+  // Tocarlo lo remueve: no adelanta nada, pero un huevo que no responde parece
+  // una imagen pegada.
+  wrap.addEventListener('pointerdown', () => {
+    img.classList.remove('egg-poke');
+    void img.offsetWidth;
+    img.classList.add('egg-poke');
+    spawnEggSparkle(wrap);
+  });
+
+  camera.appendChild(wrap);
+
+  ['depth', 'sides'].forEach((zone) => {
+    const layer = document.createElement('div');
+    layer.className = `tilt-shift ${zone}`;
+    camera.appendChild(layer);
+  });
+
+  const fade = document.createElement('div');
+  fade.className = 'stage-fade';
+  stage.appendChild(fade);
+
+  petStageEl = stage;
+  petWrapEl = wrap;
+  eggPos = { u: 0.5, v: 0.82 };
+
+  applyShadow(wrap, img, EGG_SPRITE).then(() => placeEgg());
+  placeEgg();
+  updateEgg(state);
+}
+
+function placeEgg() {
+  if (!petWrapEl || !projection) return;
+  placeActor(petWrapEl, projection, eggPos, footOffset(petWrapEl));
+  cameraEl.style.setProperty('--focus-y', `${((projection.project(eggPos.u, eggPos.v).y / petStageEl.clientHeight) * 100).toFixed(1)}%`);
+}
+
+// Chispita suelta alrededor del huevo. Salen solas conforme se acerca la hora, y
+// también al tocarlo.
+function spawnEggSparkle(wrap) {
+  const sp = document.createElement('i');
+  sp.className = 'egg-sparkle';
+  const angle = Math.random() * Math.PI * 2;
+  const reach = 40 + Math.random() * 34;
+  sp.style.setProperty('--sx', `${(Math.cos(angle) * reach).toFixed(1)}px`);
+  sp.style.setProperty('--sy', `${(Math.sin(angle) * reach - 20).toFixed(1)}px`);
+  sp.style.setProperty('--ss', (0.6 + Math.random() * 0.7).toFixed(2));
+  wrap.appendChild(sp);
+  setTimeout(() => sp.remove(), 900);
+}
+
+// Cuanto menos le queda al huevo, más rápido y más fuerte se remueve, más brilla
+// y más chispas suelta.
+let lastSparkleAt = 0;
+
 function updateEgg(state) {
   if (!eggImgEl) return;
   const p = eggProgress(state.pet);
   eggImgEl.style.setProperty('--egg-period', `${(2.6 - p * 2.05).toFixed(2)}s`);
   eggImgEl.style.setProperty('--egg-tilt', `${(1.5 + p * 8).toFixed(1)}deg`);
   eggImgEl.style.setProperty('--egg-lift', `${Math.round(p * 7)}px`);
+
+  if (petWrapEl) petWrapEl.style.setProperty('--egg-progress', p.toFixed(3));
+
+  // El anillo de la tarjeta, que en un Pokémon es la experiencia, aquí cuenta lo
+  // que le queda al huevo: el sitio ya está y no hace falta inventar otro.
+  setXpRing(p);
+
+  // A partir de media cuesta empieza a soltar chispas, cada vez más seguidas.
+  const now = Date.now();
+  if (p > 0.45 && now - lastSparkleAt > 700 - p * 500) {
+    lastSparkleAt = now;
+    spawnEggSparkle(petWrapEl);
+  }
 }
 
 // Cada estado con su icono y su color. El color hace casi todo el trabajo: se

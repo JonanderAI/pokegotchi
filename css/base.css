@@ -493,15 +493,17 @@ html, body {
    (steps) para que se mueva como el pixel art que es. */
 @keyframes egg-stir {
   0%   { transform: rotate(0) translateY(0); }
-  20%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -1)) translateY(0); }
-  40%  { transform: rotate(var(--egg-tilt, 2deg)) translateY(calc(var(--egg-lift, 0px) * -1)); }
-  60%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -1)) translateY(0); }
-  80%  { transform: rotate(var(--egg-tilt, 2deg)) translateY(0); }
+  15%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -1)) translateY(0); }
+  35%  { transform: rotate(var(--egg-tilt, 2deg)) translateY(calc(var(--egg-lift, 0px) * -1)); }
+  55%  { transform: rotate(calc(var(--egg-tilt, 2deg) * -.7)) translateY(0); }
+  75%  { transform: rotate(calc(var(--egg-tilt, 2deg) * .5)) translateY(0); }
   100% { transform: rotate(0) translateY(0); }
 }
 .egg-wrap img {
   transform-origin: 50% 100%;
-  animation: egg-stir var(--egg-period, 2.6s) steps(1) infinite;
+  /* Se mece, no da tirones: antes iba a saltos fijos (steps) como el resto del
+     pixel art, pero aquí lo que se mueve es el huevo entero y salía brusco. */
+  animation: egg-stir var(--egg-period, 2.6s) ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .egg-wrap img { animation: none; }
@@ -644,6 +646,11 @@ html, body {
   pointer-events: none;
   background: linear-gradient(180deg, rgba(38, 50, 96, .3) 0%, rgba(28, 38, 78, .17) 100%);
 }
+/* Las matas del suelo: apenas se ven una a una, pero juntas quitan la sensación
+   de estar sobre una superficie lisa de color plano. */
+.floor-patches ellipse { fill: rgba(120, 150, 120, .10); }
+.pet-stage.night .floor-patches ellipse { fill: rgba(90, 110, 160, .12); }
+
 /* difumina el borde del fondo contra el cielo */
 .world-floor .haze-top { stop-color: #e9eef7; stop-opacity: .95; }
 .world-floor .haze-mid { stop-color: #e9eef7; stop-opacity: .55; }
@@ -1607,4 +1614,83 @@ html, body {
 
   .bag-item, .more-btn, .berry-choice, .dex-cell, .pill-btn { cursor: pointer; }
   .stat-cell { cursor: help; }
+}
+
+/* --- el huevo --------------------------------------------------------------
+   Va en el mismo escenario que el Pokémon, con su suelo y su sombra, así que se
+   coloca como un actor más. Lo suyo es el halo, que crece según se acerca la
+   hora, y las chispas. */
+.egg-wrap {
+  position: absolute;
+  width: var(--pet-size, 220px);
+  height: var(--pet-size, 220px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.egg-wrap img {
+  position: relative;
+  z-index: 1;
+  width: 46%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* El halo: casi nada al principio y bien visible al final, latiendo cada vez
+   más deprisa. --egg-progress lo va subiendo updateEgg. */
+.egg-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(255, 252, 230, calc(.75 * var(--egg-progress, 0))) 0%,
+    rgba(255, 240, 180, calc(.45 * var(--egg-progress, 0))) 45%,
+    rgba(255, 240, 180, 0) 70%);
+  animation: egg-pulse calc(2.4s - var(--egg-progress, 0) * 1.7s) ease-in-out infinite;
+}
+
+@keyframes egg-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(.9); }
+  50%      { transform: translate(-50%, -50%) scale(1.12); }
+}
+
+/* al tocarlo se lleva un meneo, aunque no adelante nada */
+@keyframes egg-poke {
+  0%   { transform: rotate(0) scale(1); }
+  25%  { transform: rotate(-9deg) scale(1.06); }
+  55%  { transform: rotate(7deg) scale(1.03); }
+  80%  { transform: rotate(-4deg) scale(1); }
+  100% { transform: rotate(0) scale(1); }
+}
+.egg-wrap img.egg-poke { animation: egg-poke .45s steps(4); }
+
+.egg-sparkle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  border-radius: 50%;
+  background: #fff6c9;
+  box-shadow: 0 0 6px 2px rgba(255, 236, 160, .9);
+  pointer-events: none;
+  z-index: 2;
+  animation: egg-sparkle .9s ease-out forwards;
+}
+
+@keyframes egg-sparkle {
+  0%   { transform: translate(0, 0) scale(0); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(var(--sx, 0), var(--sy, -40px)) scale(var(--ss, 1)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .egg-glow, .egg-wrap img.egg-poke, .egg-sparkle { animation: none; }
 }

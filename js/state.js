@@ -1,4 +1,4 @@
-import { randomSpeciesId } from './species-pool.js';
+import { randomSpeciesId, randomStarterId } from './species-pool.js';
 
 const STORAGE_KEY = 'pokegotchi-save-v1';
 const SCHEMA_VERSION = 1;
@@ -67,6 +67,7 @@ function freshPet() {
   return {
     phase: 'egg', // egg | baby | child | teen | adult | oak
     speciesId: randomSpeciesId(),
+    starter: false,   // el primero de la partida, que es un inicial
     nickname: '',     // el mote que le pongas; si no, va con el de su especie
     eggMs: 0,         // lo que lleva el huevo, en tiempo real
     stageAge: 0,      // ticks en la etapa actual
@@ -87,10 +88,20 @@ function freshPet() {
   };
 }
 
+// El primer Pokémon de una partida nueva es un inicial. Se decide aquí y no en
+// freshPet porque freshPet también se usa al reiniciar dentro de una partida ya
+// empezada, y ahí ya no toca.
+function firstPet() {
+  const pet = freshPet();
+  pet.speciesId = randomStarterId();
+  pet.starter = true;
+  return pet;
+}
+
 function freshState() {
   return {
     version: SCHEMA_VERSION,
-    pet: freshPet(),
+    pet: firstPet(),
     pokedex: {}, // { [speciesId]: { seen: true, raised: bool, name, types } }
     gifts: [],   // bayas que te han regalado los salvajes, por su nombre
     settings: { notifications: false },

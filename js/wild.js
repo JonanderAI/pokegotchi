@@ -19,6 +19,7 @@ const FAMILY_CHANCE = 0.28;
 const FAMILY_BABIES = [2, 4];   // cuántas crías, de mínimo a máximo
 const BABY_SIZE = 0.5;          // lo que miden respecto a su madre
 const BABY_GAP = 2;             // pasos de retraso entre uno y el siguiente
+const BABY_SCATTER = 0.09;      // cuánto se sale cada cría de la fila
 
 // Parejas conocidas de antemano (final de línea evolutiva y su forma de base).
 // Va a mano y no vía PokeAPI a propósito: esto tiene que salir igual de bien sin
@@ -187,6 +188,13 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
         tappable: false,
         follows: true,
       });
+      // Cada una con su desvío y su retraso: siguen el mismo camino, pero no
+      // pisándolo exacto. En fila perfecta parecían un tren, no crías.
+      baby.offset = {
+        u: (Math.random() - 0.5) * BABY_SCATTER,
+        v: (Math.random() - 0.5) * BABY_SCATTER,
+      };
+      baby.gap = BABY_GAP + Math.floor(Math.random() * 2);
       mother.followers.push(baby);
     }
   }
@@ -198,14 +206,16 @@ export function mountWildPokemon(stageEl, getProjection, opts = {}) {
     if (!mother.followers || !mother.followers.length) return;
 
     mother.trail.unshift({ u: mother.pos.u, v: mother.pos.v, dir: mother.dir });
-    const needed = mother.followers.length * BABY_GAP + 1;
+    const needed = mother.followers.length * (BABY_GAP + 1) + 2;
     if (mother.trail.length > needed) mother.trail.length = needed;
 
     mother.followers.forEach((baby, i) => {
-      const point = mother.trail[Math.min((i + 1) * BABY_GAP, mother.trail.length - 1)];
+      const back = (i + 1) * (baby.gap || BABY_GAP);
+      const point = mother.trail[Math.min(back, mother.trail.length - 1)];
       if (!point) return;
-      baby.pos.u = point.u;
-      baby.pos.v = point.v;
+      const off = baby.offset || { u: 0, v: 0 };
+      baby.pos.u = Math.min(0.98, Math.max(0.02, point.u + off.u));
+      baby.pos.v = Math.min(0.75, Math.max(0.02, point.v + off.v));
       face(baby, point.dir);
       hop(baby);
       place(baby);

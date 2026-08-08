@@ -15,6 +15,21 @@ export const SPECIES_POOL = [
   252, 255, 258, 261, 263, 276, 300, 304, 328, 349, 371, 374,
 ];
 
+// El primer huevo de la partida no sale de la bolsa común: toca un inicial, que
+// es como empieza todo el mundo en los juegos. Van los nueve de Kanto, Johto y
+// Hoenn (hasta donde llegan los sprites animados) más Pikachu y Eevee, que son
+// iniciales de pleno derecho en Amarillo y en el Coliseo.
+export const STARTERS = [
+  1, 4, 7,          // Bulbasaur, Charmander, Squirtle
+  25, 133,          // Pikachu, Eevee
+  152, 155, 158,    // Chikorita, Cyndaquil, Totodile
+  252, 255, 258,    // Treecko, Torchic, Mudkip
+];
+
+export function randomStarterId() {
+  return STARTERS[Math.floor(Math.random() * STARTERS.length)];
+}
+
 export function randomSpeciesId() {
   return SPECIES_POOL[Math.floor(Math.random() * SPECIES_POOL.length)];
 }
