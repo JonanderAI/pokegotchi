@@ -53,8 +53,8 @@ let pendingIntro = null; // 'hatch' | 'evolve'
 // Hasta dónde puede irse por el suelo. Va de casi el fondo a casi el borde de
 // delante: el sitio lo hay, y con la cámara siguiéndole ya no se pierde de vista
 // por alejarse.
-const PET_MIN_V = 0.22;
-const PET_MAX_V = 1.02;
+const PET_MIN_V = 0.06;
+const PET_MAX_V = 1.28;
 
 // Los límites laterales no son fijos: dependen de lo ancho que se vea el
 // Pokémon a esa profundidad, para que nunca se le corte medio cuerpo. Se usa el
@@ -1514,6 +1514,9 @@ function updateSky() {
   if (palette.name === skyName && skyEl) return;
   skyName = palette.name;
 
+  // el suelo funde con el cielo usando este color, así que se lo dejamos puesto
+  if (petStageEl) petStageEl.style.setProperty('--horizon-color', palette.low);
+
   const next = buildSky(projection, palette);
   if (skyEl) skyEl.replaceWith(next);
   else cameraEl.prepend(next);
@@ -1533,14 +1536,20 @@ function updateCamera() {
   const zoom = manual ? camManual.zoom : cameraZoom();
 
   // Tope: lo que se puede desplazar sin que asome el borde de lo que hay pintado.
+  // Siguiéndole solo se desplaza lo que se puede sin destapar el borde de lo
+  // pintado. A mano se deja mucho más suelto: el terreno y el cielo se dibujan
+  // tres veces más anchos que la ventana, así que hay sitio de sobra para
+  // asomarse, y quedarse encerrado en un palmo no tenía ninguna gracia.
   const maxX = Math.max(0, ((zoom - 1) / 2) * w);
   const maxY = Math.max(0, ((zoom - 1) / 2) * h);
+  const roamX = w * 0.9;
+  const roamY = h * 0.6;
 
   let tx;
   let ty;
   if (manual) {
-    tx = Math.max(-maxX, Math.min(maxX, camManual.tx));
-    ty = Math.max(-maxY, Math.min(maxY, camManual.ty));
+    tx = Math.max(-roamX, Math.min(roamX, camManual.tx));
+    ty = Math.max(-roamY, Math.min(roamY, camManual.ty));
     camManual.tx = tx;
     camManual.ty = ty;
   } else {
@@ -1743,17 +1752,12 @@ function buildHomeDOM(state) {
 
   // Van al final para quedar por encima de todo lo que hay sobre el suelo: son
   // el desenfoque de la cámara, no una capa del escenario.
-  ['depth', 'sides'].forEach((zone) => {
-    const layer = document.createElement('div');
-    layer.className = `tilt-shift ${zone}`;
-    camera.appendChild(layer);
-  });
 
-  // La viñeta cierra el escenario por los bordes, así que va fuera de la capa de
-  // cámara: tiene que quedarse quieta aunque el mundo se mueva.
-  const fade = document.createElement('div');
-  fade.className = 'stage-fade';
-  stage.appendChild(fade);
+  // El desenfoque de profundidad, y solo eso: la viñeta y el difuminado lateral
+  // se leían como niebla encima de la zona de paseo.
+  const depth = document.createElement('div');
+  depth.className = 'tilt-shift depth';
+  camera.appendChild(depth);
 
   petStageEl = stage;
   petWrapEl = wrap;
@@ -1803,9 +1807,43 @@ function playPendingIntro(wrap, img) {
   img.classList.add(kind === 'evolve' ? 'evolving' : 'hatching');
 
   const burst = document.createElement('div');
-  burst.className = 'pet-burst';
+  burst.className = `pet-burst${kind === 'hatch' ? ' big' : ''}`;
   wrap.appendChild(burst);
-  setTimeout(() => burst.remove(), 700);
+  setTimeout(() => burst.remove(), 900);
+
+  if (kind === 'hatch') spawnShell(wrap);
+}
+
+// La cáscara saltando por los aires. Antes el huevo desaparecía sin más y el
+// Pokémon aparecía de golpe: no se rompía nada, que es justo lo que uno espera
+// ver al eclosionar.
+const SHELL_PIECES = 14;
+
+function spawnShell(wrap) {
+  // La onda que sale del huevo al partirse, por debajo de los trozos.
+  const ring = document.createElement('div');
+  ring.className = 'egg-shockwave';
+  wrap.appendChild(ring);
+  setTimeout(() => ring.remove(), 800);
+
+  for (let i = 0; i < SHELL_PIECES; i += 1) {
+    const piece = document.createElement('i');
+    piece.className = `egg-shard${i % 3 === 0 ? ' dark' : ''}`;
+
+    // Salen hacia arriba y a los lados, y caen: el ángulo se reparte por el
+    // semicírculo de arriba para que ninguno se hunda en el suelo al empezar.
+    const angle = Math.PI + (i / SHELL_PIECES) * Math.PI + (Math.random() - 0.5) * 0.35;
+    const reach = 46 + Math.random() * 52;
+    piece.style.setProperty('--sx', `${(Math.cos(angle) * reach).toFixed(1)}px`);
+    piece.style.setProperty('--sy', `${(Math.sin(angle) * reach).toFixed(1)}px`);
+    piece.style.setProperty('--fall', `${(40 + Math.random() * 50).toFixed(0)}px`);
+    piece.style.setProperty('--rot', `${((Math.random() - 0.5) * 620).toFixed(0)}deg`);
+    piece.style.setProperty('--size', `${(4 + Math.random() * 5).toFixed(1)}px`);
+    piece.style.animationDelay = `${(Math.random() * 60).toFixed(0)}ms`;
+
+    wrap.appendChild(piece);
+    setTimeout(() => piece.remove(), 1200);
+  }
 }
 
 // El huevo se pone en el mismo escenario que el Pokémon (suelo, perspectiva,
@@ -1861,15 +1899,9 @@ function buildEggScene(state) {
 
   camera.appendChild(wrap);
 
-  ['depth', 'sides'].forEach((zone) => {
-    const layer = document.createElement('div');
-    layer.className = `tilt-shift ${zone}`;
-    camera.appendChild(layer);
-  });
-
-  const fade = document.createElement('div');
-  fade.className = 'stage-fade';
-  stage.appendChild(fade);
+  const depth = document.createElement('div');
+  depth.className = 'tilt-shift depth';
+  camera.appendChild(depth);
 
   petStageEl = stage;
   petWrapEl = wrap;

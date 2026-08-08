@@ -339,9 +339,9 @@ export function buildFloor(proj) {
     </linearGradient>
     <linearGradient id="floor-haze-grad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" class="haze-top" />
-      <stop offset="0.45" class="haze-mid" />
       <stop offset="1" class="haze-bottom" />
-    </linearGradient>`;
+    </linearGradient>
+`;
   svg.appendChild(defs);
 
   const ground = document.createElementNS(SVG_NS, 'polygon');
@@ -354,121 +354,19 @@ export function buildFloor(proj) {
   ].join(' '));
   svg.appendChild(ground);
 
-  // La hierba, dibujada en un canvas y metida como imagen: son miles de
-  // pinceladas y hacerlas de una en una en SVG dejaría el escenario de rodillas.
-  // Se dibuja tan ancha como el terreno, no como el encuadre: al alejar la
-  // cámara la capa se encoge y si midiera justo la ventana se vería el corte.
-  const grass = document.createElementNS(SVG_NS, 'image');
-  grass.setAttribute('href', grassTexture(proj));
-  grass.setAttribute('x', String(-proj.width));
-  grass.setAttribute('y', far.y.toFixed(1));
-  grass.setAttribute('width', String(proj.width * 3));
-  grass.setAttribute('height', (near.y - far.y).toFixed(1));
-  grass.setAttribute('preserveAspectRatio', 'none');
-  grass.setAttribute('class', 'floor-grass');
-  svg.appendChild(grass);
-
-  // Neblina donde el suelo se junta con el fondo, para que el borde del terreno
-  // no se vea como un corte recto.
+  // La costura entre cielo y suelo: sin esto se ve la línea recta donde acaba
+  // uno y empieza el otro. Va del color del cielo a esa hora (lo pone la propia
+  // capa del cielo en --horizon-color) a transparente, y tan ancha como el
+  // terreno: midiendo justo la ventana quedaba flotando al alejar la cámara.
   const haze = document.createElementNS(SVG_NS, 'rect');
   haze.setAttribute('class', 'floor-haze');
-  haze.setAttribute('x', '0');
-  haze.setAttribute('y', (far.y - proj.height * 0.06).toFixed(1));
-  haze.setAttribute('width', String(proj.width));
-  haze.setAttribute('height', (proj.height * 0.14).toFixed(1));
+  haze.setAttribute('x', String(-proj.width));
+  haze.setAttribute('y', far.y.toFixed(1));
+  haze.setAttribute('width', String(proj.width * 3));
+  haze.setAttribute('height', (proj.height * 0.09).toFixed(1));
   svg.appendChild(haze);
 
   return svg;
-}
-
-// --- hierba ------------------------------------------------------------------
-//
-// El suelo es un tablero de baldosas de hierba en perspectiva, como el overworld
-// de los juegos: dos verdes que se alternan, con muy poco contraste. Las
-// baldosas miden lo mismo sobre el terreno, así que se van encogiendo y juntando
-// hacia el horizonte solas, y eso es lo que hace que se lea como suelo y no como
-// una trama pegada encima.
-//
-// Va en un canvas porque son más de mil baldosas: en SVG serían mil nodos.
-
-const GRASS_A = 'rgba(255, 255, 255, .07)';
-const GRASS_B = 'rgba(60, 110, 60, .07)';
-const GRASS_LINE = 'rgba(70, 120, 70, .07)';
-
-const grassCache = new Map();
-
-// Cuánto ocupa una baldosa sobre el terreno, en coordenadas del mundo.
-const TILE_U = 0.16;
-const TILE_V = 0.075;
-
-function grassTexture(proj) {
-  const key = `${proj.width}x${proj.height}`;
-  const hit = grassCache.get(key);
-  if (hit) return hit;
-
-  // De la línea del horizonte al borde delantero del terreno, que cae bastante
-  // por debajo de la ventana: si el lienzo acabara en el borde, al alejar la
-  // cámara se vería el corte de la hierba.
-  const top = proj.project(0.5, 0).y;
-  const bottom = proj.project(0.5, 1.6).y;
-  const h = Math.max(1, Math.round(bottom - top));
-  const w = Math.round(proj.width * 3);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-
-  // El canvas cubre de -1 a +2 anchos de pantalla, así que hay que correr todo
-  // un ancho a la derecha para que el 0 del mundo caiga en su sitio.
-  const OFF_X = proj.width;
-  const U_MIN = -3;
-  const U_MAX = 4;
-  const V_NEAR = 1.6;
-
-  const quad = (u0, u1, v0, v1, fill) => {
-    const a1 = proj.project(u0, v0);
-    const b1 = proj.project(u1, v0);
-    const b2 = proj.project(u1, v1);
-    const a2 = proj.project(u0, v1);
-    ctx.beginPath();
-    ctx.moveTo(a1.x + OFF_X, a1.y - top);
-    ctx.lineTo(b1.x + OFF_X, b1.y - top);
-    ctx.lineTo(b2.x + OFF_X, b2.y - top);
-    ctx.lineTo(a2.x + OFF_X, a2.y - top);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-  };
-
-  let row = 0;
-  for (let v = 0; v < V_NEAR; v += TILE_V, row += 1) {
-    const v2 = Math.min(V_NEAR, v + TILE_V);
-    let col = 0;
-    for (let u = U_MIN; u < U_MAX; u += TILE_U, col += 1) {
-      const u2 = Math.min(U_MAX, u + TILE_U);
-      // solo se pinta una de cada dos: el tablero sale del hueco que queda
-      if ((row + col) % 2 === 0) quad(u, u2, v, v2, GRASS_A);
-      else if ((row + col) % 4 === 1) quad(u, u2, v, v2, GRASS_B);
-    }
-  }
-
-  // Y las juntas entre filas, muy flojas, que es lo que remata la sensación de
-  // profundidad: se van juntando hacia el fondo.
-  ctx.strokeStyle = GRASS_LINE;
-  ctx.lineWidth = 1;
-  for (let v = 0; v < V_NEAR; v += TILE_V) {
-    const p1 = proj.project(U_MIN, v);
-    const p2 = proj.project(U_MAX, v);
-    ctx.beginPath();
-    ctx.moveTo(p1.x + OFF_X, p1.y - top);
-    ctx.lineTo(p2.x + OFF_X, p2.y - top);
-    ctx.stroke();
-  }
-
-  const url = canvas.toDataURL('image/png');
-  grassCache.set(key, url);
-  return url;
 }
 
 // Coloca un actor (mascota o Pokémon salvaje) sobre el suelo. El punto de
