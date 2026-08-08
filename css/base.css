@@ -280,90 +280,130 @@ html, body {
 /* la interfaz va por encima del mundo */
 #info-card, #statbar { position: relative; z-index: 2; }
 
-/* Aviso flotante: baja desde arriba, se queda lo justo y se va solo. Ocupa lo
-   que ocupa su texto y no más, porque tapa el mundo mientras está. El icono y el
-   filo de color dicen el tono antes de leer nada. */
+/* Aviso flotante. Está hecho a imagen de la tarjeta del Pokémon: mismo ancho,
+   mismo cristal, misma chapa cuadrada para el icono y los mismos tamaños de
+   letra. Baja desde debajo de ella, se queda lo justo y se va. Lo único suyo es
+   el color, que sale del tono del aviso. */
 #banner {
   position: absolute;
-  /* justo por debajo de la tarjeta de arriba, que mide 18 de hueco + 84 de alto */
-  top: calc(env(safe-area-inset-top, 0px) + 112px);
-  left: 12px;
-  right: 12px;
-  width: fit-content;
-  max-width: calc(100% - 24px);
-  margin: 0 auto;
+  /* pegado a la tarjeta de arriba, que ocupa 18 de hueco + 84 de alto */
+  top: calc(env(safe-area-inset-top, 0px) + 106px);
+  left: 14px;
+  right: 14px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 7px 12px 7px 8px;
+  gap: 10px;
+  padding: 10px 12px;
   background: var(--card-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  border-left: 3px solid var(--tone-color, var(--accent));
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.25;
-  text-align: left;
+  border-radius: 16px;
   box-shadow: var(--glass-shadow);
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
   z-index: 8;
   /* es un aviso, no una barrera: con el mundo a pantalla completa se solapa con
      el suelo y no debe robarle los toques (arrastrar la baya, tocar al Pokémon) */
   pointer-events: none;
 }
 
-/* con descripción ya no cabe de píldora: se cuadra un poco */
-#banner:has(.banner-desc) { border-radius: 16px; padding: 8px 13px 8px 8px; }
+/* Mientras dura la partida, el aviso ES la tarjeta: se pone en su sitio y la de
+   arriba se quita, para no tener dos tarjetas iguales una encima de otra. Va con
+   !important porque renderInfoCard le pone el display por estilo en línea. */
+#screen.banner-as-card #info-card { display: none !important; }
+#screen.banner-as-card #banner { top: calc(env(safe-area-inset-top, 0px) + 18px); }
 
 #banner.banner-tone-info { --tone-color: var(--accent); }
 #banner.banner-tone-good { --tone-color: #2fb37a; }
 #banner.banner-tone-warn { --tone-color: #e0a92c; }
 #banner.banner-tone-bad  { --tone-color: #d64545; }
 
+/* La chapa del icono, igual que la del sprite en la tarjeta pero teñida del
+   tono: es lo que dice de un vistazo si es buena o mala noticia. Lleva alrededor
+   el mismo anillo que la exp, pero contando lo que le queda al aviso. */
+.banner-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--tone-color, var(--accent));
+  background: color-mix(in srgb, var(--tone-color, var(--accent)) 16%, rgba(255, 255, 255, .5));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 1px 3px rgba(20, 24, 40, .08);
+}
+
+.banner-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.banner-ring rect {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.banner-ring .ring-track { stroke: rgba(20, 24, 40, .1); }
+.banner-ring .ring-fill { stroke: var(--tone-color, var(--accent)); }
+
 .banner-text {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
 }
 
 #banner p { margin: 0; }
 
-#banner .banner-title { font-size: 12px; }
+/* mismos tamaños que el nombre y el estado de la tarjeta */
+#banner .banner-title { font-size: 13px; font-weight: bold; }
 
 #banner .banner-desc {
   margin-top: 2px;
-  font-size: 9.5px;
-  line-height: 1.3;
-  opacity: .68;
+  font-size: 10px;
+  opacity: .65;
 }
 
-.banner-icon {
+/* Los botones van a la derecha y son solo icono: con texto ensanchaban el aviso
+   y lo primero que se leía era el botón, no lo que pasaba. */
+.banner-actions {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  display: flex;
+  gap: 6px;
+}
+
+.banner-action {
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  font-size: 12px;
-  color: var(--tone-color, var(--accent));
-  /* el mismo color del tono, rebajado, para que el disco no compita con el texto */
-  background: color-mix(in srgb, var(--tone-color, var(--accent)) 14%, transparent);
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, .55);
+  color: var(--ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 1px 3px rgba(20, 24, 40, .1);
+  transition: transform .12s ease, background .15s ease;
 }
 
-#banner button {
-  pointer-events: auto;
-  flex: 0 0 auto;
-  font-family: var(--font-pixel);
-  font-size: 11px;
+/* el que se espera que pulses va macizo, en el color del tono */
+.banner-action.primary {
   background: var(--tone-color, var(--accent));
   color: #fff;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 999px;
-  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .35) inset,
+              0 3px 8px -2px color-mix(in srgb, var(--tone-color) 55%, transparent);
 }
-#banner button:active { transform: scale(.95); }
+
+.banner-action:active { transform: scale(.93); }
 
 #banner.hidden { display: none; }
 
@@ -681,28 +721,32 @@ html, body {
   .sleep-z span { animation-duration: 6s; }
 }
 
-/* Bocadillos de estado: dicen de un golpe de vista qué le pasa. La pila va
-   colgada del borde izquierdo real del sprite que mide sprite-shadow.js (igual
-   que las Zzz), no de la caja del lienzo, que en los sprites de Emerald va
-   medio vacía. Pueden salir varios a la vez, lo urgente arriba. */
+/* Bocadillos de estado: dicen de un golpe de vista qué le pasa. Van en órbita
+   alrededor de la cabeza, todos a la misma distancia y sin tocarse, en vez de
+   apilados: así se ve que salen del Pokémon y no de una lista. El centro de la
+   órbita es el borde de arriba que midió sprite-shadow.js, no la esquina de la
+   caja, que en los sprites de Emerald va medio vacía. */
 .pet-bubbles {
   position: absolute;
-  /* punto de anclaje: la esquina superior derecha del Pokémon. Los bocadillos
-     salen de ahí en diagonal hacia arriba, el más urgente el más cercano. */
-  left: var(--sprite-right, 82%);
+  /* centro de la órbita: justo encima de la cabeza */
+  left: calc(var(--sprite-right, 82%) - var(--sprite-w, 0px) / 2);
   top: var(--sprite-top, 6%);
   width: 0;
   height: 0;
+  /* radio: se abre con lo ancho que sea el Pokémon, con un mínimo para que en
+     los pequeños no se le peguen a la cara */
+  --orbit: max(64px, calc(var(--sprite-w, 90px) * .66));
   pointer-events: none;
   z-index: 3;
 }
 
 .pet-bubble {
   position: absolute;
-  left: calc(6px + var(--i, 0) * 30px);
-  bottom: calc(4px + var(--i, 0) * 34px);
-  width: 44px;
-  height: 44px;
+  --d: 44px;
+  left: calc(var(--x, 0) * var(--orbit) - var(--d) / 2);
+  top: calc(var(--y, -1) * var(--orbit) - var(--d) / 2);
+  width: var(--d);
+  height: var(--d);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -714,38 +758,29 @@ html, body {
   font-size: 21px;
 }
 
-/* El rabito lo lleva solo el primero (uno por bocadillo ensuciaba la diagonal):
-   dos burbujitas bajando hacia la cabeza, que queda abajo a la izquierda. Un
-   pico de triángulo o un rombo sobre un bocadillo redondo se ve como un
-   cuadrado pegado; así acompaña la forma. */
-.pet-bubble:first-child::before,
-.pet-bubble:first-child::after {
+/* Ahora el rabito lo lleva cada uno, apuntando hacia dentro: son dos burbujitas
+   en la línea que une el globo con el Pokémon, así que se ve de cuál sale. */
+.pet-bubble::before,
+.pet-bubble::after {
   content: "";
   position: absolute;
+  left: 50%;
+  top: 50%;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 2px 5px -2px rgba(20, 24, 40, .28);
 }
-.pet-bubble:first-child::before {
-  width: 11px;
-  height: 11px;
-  left: -1px;
-  bottom: -4px;
-  animation: tail-dot 2.4s ease-in-out infinite;
+.pet-bubble::before {
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  transform: translate(calc(var(--x, 0) * -26px), calc(var(--y, -1) * -26px));
 }
-.pet-bubble:first-child::after {
+.pet-bubble::after {
   width: 6px;
   height: 6px;
-  left: -9px;
-  bottom: -13px;
-  animation: tail-dot 2.4s ease-in-out .22s infinite;
-}
-
-/* los puntos van latiendo hacia la cabeza, el pequeño un pelín después que el
-   grande: así el rabito parece que sale del Pokémon y no que está pegado */
-@keyframes tail-dot {
-  0%, 100% { transform: scale(.7); opacity: .7; }
-  45%      { transform: scale(1); opacity: 1; }
+  margin: -3px;
+  transform: translate(calc(var(--x, 0) * -38px), calc(var(--y, -1) * -38px));
 }
 
 /* cuando todo va bien o está dormido no hace falta que grite */
@@ -756,8 +791,7 @@ html, body {
 .pet-bubble.action {
   pointer-events: auto;
   cursor: pointer;
-  width: 54px;
-  height: 54px;
+  --d: 54px;
   font-size: 26px;
   box-shadow: 0 4px 12px -3px rgba(20, 24, 40, .3),
               0 0 0 0 color-mix(in srgb, var(--bubble-color) 55%, transparent);
@@ -933,12 +967,12 @@ html, body {
 .berry-shadow {
   position: absolute;
   width: calc(var(--prop-size, 40px) * var(--depth-scale, 1) * 1.05);
-  height: calc(var(--prop-size, 40px) * var(--depth-scale, 1) * .38);
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center,
-    rgba(20, 24, 40, .5) 0%,
-    rgba(20, 24, 40, .32) 55%,
-    rgba(20, 24, 40, 0) 72%);
+  height: calc(var(--prop-size, 40px) * var(--depth-scale, 1) * .42);
+  /* la misma elipse pixelada que la de los Pokémon, solo que más pequeña: la
+     dibuja sprite-shadow.js y se pone como fondo desde el JS */
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }

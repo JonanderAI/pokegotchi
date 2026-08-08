@@ -154,6 +154,13 @@ const CORE_RATIO = 0.62; // parte central (en distancia elíptica al cuadrado)
 
 const ellipseCache = new Map();
 
+// La misma elipse pixelada que llevan los Pokémon, para cosas que no tienen
+// sprite medido (las bayas). Se pide pequeña a propósito: al escalarla con
+// image-rendering: pixelated mantiene el grano gordo del resto del juego.
+export function pixelShadowUrl(w = 13, h = 6) {
+  return ellipseUrl(Math.max(2, Math.round(w)), Math.max(2, Math.round(h)));
+}
+
 // Elipse pixelada de w x h píxeles nativos, como data URL.
 function ellipseUrl(w, h) {
   const key = `${w}x${h}`;

@@ -1,5 +1,5 @@
 import { resolveSprite, iconFor, randomBerries, berryNamed, EGG_SPRITE, EGG_ICON, ITEM_ICONS } from './sprite-resolver.js';
-import { applyShadow, footOffset } from './sprite-shadow.js';
+import { applyShadow, footOffset, pixelShadowUrl } from './sprite-shadow.js';
 import { animateSprite } from './sprite-anim.js';
 import { createProjection, buildFloor, placeActor, placeProp, uRangeFor, quantizeScale, STEP_U, STEP_V } from './world.js';
 import { mountWildPokemon } from './wild.js';
@@ -320,6 +320,8 @@ export function render(state) {
 
 // Los avisos van por tono, no todos iguales: el color y el icono ya dicen si es
 // una buena noticia o algo que hay que atender antes de leer la frase.
+const MAX_BANNER_ACTIONS = 2;
+
 const BANNER_TONES = {
   info: 'fa-circle-info',
   good: 'fa-circle-check',
@@ -337,6 +339,11 @@ export function showBanner(message, opts = {}) {
     return;
   }
 
+  // Hay avisos que no se asoman: se ponen en el sitio de la tarjeta del Pokémon
+  // y la sustituyen mientras duran (la partida, por ejemplo). Así no hay dos
+  // tarjetas a la vez y el aviso manda mientras está pasando algo.
+  screenEl.classList.toggle('banner-as-card', !!opts.asCard);
+
   const tone = BANNER_TONES[opts.tone] ? opts.tone : 'info';
   // className limpio: se lleva por delante 'hidden' y el 'out' de un aviso que
   // se estuviera yendo, que si no se comería al que entra
@@ -345,7 +352,15 @@ export function showBanner(message, opts = {}) {
 
   const icon = document.createElement('span');
   icon.className = 'banner-icon';
-  icon.innerHTML = `<i class="fa-solid ${opts.icon || BANNER_TONES[tone]}"></i>`;
+  // El anillo alrededor del icono es el mismo truco que el de la exp: aquí
+  // cuenta lo que le queda al aviso antes de irse solo. En los que se quedan
+  // puestos no hay nada que contar, así que no sale.
+  icon.innerHTML = `
+    <svg class="banner-ring" viewBox="0 0 34 34" aria-hidden="true" focusable="false">
+      <rect class="ring-track" x="1.25" y="1.25" width="31.5" height="31.5" rx="8.75" />
+      <rect class="ring-fill" x="1.25" y="1.25" width="31.5" height="31.5" rx="8.75" />
+    </svg>
+    <i class="fa-solid ${opts.icon || BANNER_TONES[tone]}"></i>`;
   bannerEl.appendChild(icon);
 
   // Titular corto y, debajo, la explicación: el titular se lee de pasada y la
@@ -360,7 +375,10 @@ export function showBanner(message, opts = {}) {
   // La descripción solo sale cuando hay algo que hacer (o cuando el aviso se
   // queda puesto): en los de paso, el titular ya lo dice todo y dos líneas más
   // tapan media pantalla para nada.
-  const withDesc = opts.sticky || opts.actionLabel || opts.keepDesc;
+  // Como mucho dos: un aviso con más botones deja de ser un aviso.
+  const actions = (opts.actions || []).slice(0, MAX_BANNER_ACTIONS);
+
+  const withDesc = opts.sticky || actions.length || opts.keepDesc;
   if (opts.desc && withDesc) {
     const desc = document.createElement('p');
     desc.className = 'banner-desc';
@@ -369,14 +387,27 @@ export function showBanner(message, opts = {}) {
   }
   bannerEl.appendChild(text);
 
-  if (opts.actionLabel) {
-    const btn = document.createElement('button');
-    btn.textContent = opts.actionLabel;
-    btn.addEventListener('click', () => {
-      if (opts.onAction) opts.onAction();
-      hideBanner();
+  // Los botones son iconos y van a la derecha: con texto ensanchaban el aviso
+  // hasta el borde y lo que se leía primero era el botón, no lo que pasaba.
+  if (actions.length) {
+    const box = document.createElement('div');
+    box.className = 'banner-actions';
+
+    actions.forEach((action, i) => {
+      const btn = document.createElement('button');
+      // el primero es el que se espera que pulses, el segundo va en discreto
+      btn.className = i === 0 ? 'banner-action primary' : 'banner-action';
+      btn.innerHTML = `<i class="fa-solid ${action.icon}"></i>`;
+      btn.setAttribute('aria-label', action.label);
+      btn.title = action.label;
+      btn.addEventListener('click', () => {
+        if (action.onAction) action.onAction();
+        hideBanner();
+      });
+      box.appendChild(btn);
     });
-    bannerEl.appendChild(btn);
+
+    bannerEl.appendChild(box);
   }
 
   // reinicia la entrada aunque llegue un aviso pisando al anterior
@@ -384,9 +415,35 @@ export function showBanner(message, opts = {}) {
   void bannerEl.offsetWidth;
   bannerEl.classList.add('in');
 
-  if (!opts.sticky) {
-    bannerTimeout = setTimeout(hideBanner, opts.autoHideMs || 3500);
+  if (opts.sticky) {
+    // no hay cuenta atrás: el aviso se queda hasta que hagas algo
+    icon.querySelector('.banner-ring').remove();
+  } else {
+    const ms = opts.autoHideMs || 3500;
+    runBannerCountdown(icon.querySelector('.banner-ring'), ms);
+    bannerTimeout = setTimeout(hideBanner, ms);
   }
+}
+
+// El anillo se vacía en el tiempo que le queda al aviso. Va con la animación del
+// navegador y no con el bucle del juego: es cosa de la pantalla, y así no se
+// come un tick si el móvil frena la pestaña.
+function runBannerCountdown(ring, ms) {
+  if (!ring) return;
+  const fill = ring.querySelector('.ring-fill');
+  const len = typeof fill.getTotalLength === 'function' ? fill.getTotalLength() : 0;
+  if (!len) return;
+
+  // el path de un <rect> arranca pasada la esquina de arriba a la izquierda, así
+  // que se corre media arista para que la cuenta empiece arriba en el centro
+  const w = parseFloat(fill.getAttribute('width'));
+  const rx = parseFloat(fill.getAttribute('rx'));
+  fill.style.strokeDashoffset = -((w - 2 * rx) / 2);
+
+  fill.animate(
+    [{ strokeDasharray: `${len} 0` }, { strokeDasharray: `0 ${len}` }],
+    { duration: ms, easing: 'linear', fill: 'forwards' },
+  );
 }
 
 // Se va hacia arriba en vez de desaparecer de golpe. El 'hidden' se pone al
@@ -398,6 +455,7 @@ function hideBanner() {
   }
   if (bannerEl.classList.contains('hidden')) return;
 
+  screenEl.classList.remove('banner-as-card');
   bannerEl.classList.remove('in');
   bannerEl.classList.add('out');
   setTimeout(() => {
@@ -514,6 +572,7 @@ const STEP_MS = 500;
 // props, que se colocan por su base).
 function placeGroundShadow(el, pos) {
   if (!projection) return;
+  if (!el.style.backgroundImage) el.style.backgroundImage = `url("${pixelShadowUrl()}")`;
   const p = projection.project(pos.u, pos.v);
   el.style.setProperty('--depth-scale', quantizeScale(p.scale).toFixed(3));
   el.style.left = `${p.x.toFixed(1)}px`;
@@ -1420,6 +1479,15 @@ function updateEgg(state) {
 
 // Cada estado con su icono y su color. El color hace casi todo el trabajo: se
 // lee de un vistazo sin llegar a mirar qué icono es.
+// Dónde se pone cada globo según cuántos haya, en grados desde la derecha. El
+// primero (el más urgente) siempre arriba; los demás se abren a los lados sin
+// llegar a tocarse.
+const BUBBLE_SLOTS = [
+  [90],
+  [68, 112],
+  [90, 43, 137],
+];
+
 const NEED_LOOK = {
   evolving: { icon: 'fa-wand-magic-sparkles',   color: '#a78bfa', label: '¡Quiere evolucionar! Tócalo' },
   sick:     { icon: 'fa-virus',                 color: '#c79ae8', label: 'Se encuentra mal' },
@@ -1476,7 +1544,15 @@ function renderBubbles(state) {
       const look = NEED_LOOK[need.key];
       const el = document.createElement('div');
       el.className = 'pet-bubble';
-      el.style.setProperty('--i', i); // su sitio en la diagonal, lo coloca el CSS
+
+      // En órbita alrededor de la cabeza, no apilados: cada uno en su ángulo,
+      // todos a la misma distancia y con el rabito apuntando al Pokémon. El más
+      // urgente se queda arriba del todo, que es donde antes se mira.
+      const angle = BUBBLE_SLOTS[needs.length - 1][i];
+      const rad = (angle * Math.PI) / 180;
+      el.style.setProperty('--x', `${Math.cos(rad).toFixed(4)}`);
+      el.style.setProperty('--y', `${(-Math.sin(rad)).toFixed(4)}`);
+      el.style.setProperty('--i', i); // solo para escalonar el flotar
       el.classList.toggle('urgent', need.urgent);
       el.classList.toggle('calm', need.key === 'sleeping');
       // el de evolución no es un aviso, es un botón: se puede tocar
@@ -1666,10 +1742,14 @@ function startMinigame() {
   petStageEl.addEventListener('pointerdown', onGamePoint);
   petStageEl.addEventListener('pointermove', onGamePoint);
 
+  // El anillo del aviso hace de reloj de la partida: se vacía justo cuando se
+  // acaba, así que el aviso se va solo en el momento exacto.
   showBanner('¡A por las bayas!', {
     icon: 'fa-hand-pointer',
     desc: 'Arrastra el dedo para moverlo y que las atrape antes de que caigan.',
-    sticky: true,
+    keepDesc: true,
+    asCard: true,
+    autoHideMs: GAME_MS,
   });
   gameDrop();
   gameStep();
