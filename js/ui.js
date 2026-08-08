@@ -1937,42 +1937,96 @@ function renderPokedex(state) {
 // Interruptor de los avisos. Va aparte porque tiene que repintarse solo al
 // tocarlo: la pantalla de Ajustes solo se monta al entrar en ella (ver
 // mountedTab), así que un render() no lo actualizaría.
+// --- ajustes -----------------------------------------------------------------
+//
+// Las opciones van en fichas de cristal, como el resto: cada fila con su icono,
+// su nombre, una línea de explicación y a la derecha lo que haga (un
+// interruptor, una flecha). Antes eran botones sueltos con el estado metido en
+// el propio texto ("Avisos: activados"), que se lee peor y no deja ver de un
+// vistazo qué está puesto.
+
+function settingsGroup(title) {
+  const group = document.createElement('section');
+  group.className = 'settings-group';
+  if (title) {
+    const h = document.createElement('p');
+    h.className = 'settings-group-title';
+    h.textContent = title;
+    group.appendChild(h);
+  }
+  const box = document.createElement('div');
+  box.className = 'settings-card';
+  group.appendChild(box);
+  group.box = box;
+  return group;
+}
+
+function settingsRow({ icon, label, note, tone }) {
+  const row = document.createElement('div');
+  row.className = `settings-row${tone ? ` tone-${tone}` : ''}`;
+
+  const chip = document.createElement('span');
+  chip.className = 'settings-icon';
+  chip.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+
+  const text = document.createElement('div');
+  text.className = 'settings-text';
+  const name = document.createElement('p');
+  name.className = 'settings-label';
+  name.textContent = label;
+  text.appendChild(name);
+
+  const noteEl = document.createElement('p');
+  noteEl.className = 'settings-note';
+  noteEl.textContent = note || '';
+  noteEl.classList.toggle('hidden', !note);
+  text.appendChild(noteEl);
+
+  row.append(chip, text);
+  row.noteEl = noteEl;
+  row.labelEl = name;
+  return row;
+}
+
+// Interruptor de los de toda la vida: se ve puesto o quitado sin leer nada.
+function settingsSwitch(on) {
+  const sw = document.createElement('span');
+  sw.className = `settings-switch${on ? ' on' : ''}`;
+  sw.innerHTML = '<i></i>';
+  return sw;
+}
+
 function buildNotificationsSetting() {
-  const wrap = document.createElement('div');
-  wrap.style.width = '100%';
-
-  const btn = document.createElement('button');
-  btn.className = 'menu-item';
-  btn.style.width = '100%';
-
-  const note = document.createElement('p');
-  note.className = 'dex-detail';
+  const row = settingsRow({ icon: 'fa-bell', label: 'Avisos' });
+  const sw = settingsSwitch(false);
+  row.appendChild(sw);
 
   function paint() {
     const permission = notify.permission();
 
-    if (permission === 'unsupported') {
-      btn.textContent = 'Avisos no disponibles';
-      btn.disabled = true;
-      note.textContent = 'Este navegador no sabe enseñar avisos. En Chrome para Android sí funciona.';
-      return;
-    }
-    if (permission === 'denied') {
-      btn.textContent = 'Avisos bloqueados';
-      btn.disabled = true;
-      note.textContent = 'Los bloqueaste para esta página. Hay que volver a permitirlos desde los ajustes del navegador.';
+    if (permission === 'unsupported' || permission === 'denied') {
+      row.classList.add('disabled');
+      sw.classList.remove('on');
+      row.labelEl.textContent = permission === 'denied' ? 'Avisos bloqueados' : 'Avisos no disponibles';
+      row.noteEl.textContent = permission === 'denied'
+        ? 'Los bloqueaste para esta página. Hay que volver a permitirlos desde los ajustes del navegador.'
+        : 'Este navegador no sabe enseñar avisos. En Chrome para Android sí funciona.';
+      row.noteEl.classList.remove('hidden');
       return;
     }
 
     const on = Boolean(_state.settings && _state.settings.notifications) && permission === 'granted';
-    btn.disabled = false;
-    btn.textContent = on ? 'Avisos: activados' : 'Avisos: desactivados';
-    note.textContent = on
-      ? 'Te avisamos cuando tenga hambre, se ponga malo o haga una travesura, siempre que el juego siga abierto de fondo. Con la app cerrada del todo no hay avisos: al volver se te cuenta lo que ha pasado.'
+    row.classList.remove('disabled');
+    row.labelEl.textContent = 'Avisos';
+    sw.classList.toggle('on', on);
+    row.noteEl.textContent = on
+      ? 'Te avisamos cuando necesite algo, mientras el juego siga abierto de fondo. Cerrado del todo no hay avisos: al volver se te cuenta.'
       : 'Actívalos para que te avise cuando necesite algo teniendo el juego de fondo.';
+    row.noteEl.classList.remove('hidden');
   }
 
-  btn.addEventListener('click', async () => {
+  row.addEventListener('click', async () => {
+    if (row.classList.contains('disabled')) return;
     const on = Boolean(_state.settings && _state.settings.notifications) && notify.permission() === 'granted';
 
     if (on) {
@@ -2011,9 +2065,7 @@ function buildNotificationsSetting() {
   });
 
   paint();
-  wrap.appendChild(btn);
-  wrap.appendChild(note);
-  return wrap;
+  return row;
 }
 
 function renderSettings() {
@@ -2023,35 +2075,53 @@ function renderSettings() {
   title.textContent = 'Ajustes';
   viewRoot.appendChild(title);
 
-  const nameBtn = document.createElement('button');
-  nameBtn.className = 'menu-item';
-  nameBtn.style.width = '100%';
-  nameBtn.textContent = 'Ponerle un mote';
-  nameBtn.addEventListener('click', askNickname);
-  viewRoot.appendChild(nameBtn);
+  const pet = settingsGroup('Tu Pokémon');
+  const nameRow = settingsRow({
+    icon: 'fa-pen',
+    label: 'Ponerle un mote',
+    note: _state.pet.nickname ? `Ahora se llama ${_state.pet.nickname}.` : 'Va con el nombre de su especie.',
+  });
+  const chevron = document.createElement('i');
+  chevron.className = 'fa-solid fa-chevron-right settings-chevron';
+  nameRow.appendChild(chevron);
+  nameRow.addEventListener('click', askNickname);
+  pet.box.appendChild(nameRow);
+  viewRoot.appendChild(pet);
 
-  viewRoot.appendChild(buildNotificationsSetting());
+  const alerts = settingsGroup('Avisos');
+  alerts.box.appendChild(buildNotificationsSetting());
+  viewRoot.appendChild(alerts);
 
-  const btn = document.createElement('button');
-  btn.className = 'menu-item';
-  btn.style.width = '100%';
-  btn.textContent = 'Reiniciar partida';
+  const danger = settingsGroup('Partida');
+  const resetRow = settingsRow({
+    icon: 'fa-trash',
+    label: 'Reiniciar partida',
+    note: 'Se borra el Pokémon, la Pokédex y todo lo demás.',
+    tone: 'danger',
+  });
+
+  // Dos toques: borrar la partida no puede pasar por resbalar el dedo.
   let armed = false;
   let armTimeout = null;
-  btn.addEventListener('click', () => {
+  resetRow.addEventListener('click', () => {
     if (!armed) {
       armed = true;
-      btn.textContent = '¿Seguro? Toca otra vez para borrarlo todo';
+      resetRow.classList.add('armed');
+      resetRow.labelEl.textContent = '¿Seguro?';
+      resetRow.noteEl.textContent = 'Toca otra vez para borrarlo todo.';
       armTimeout = setTimeout(() => {
         armed = false;
-        btn.textContent = 'Reiniciar partida';
+        resetRow.classList.remove('armed');
+        resetRow.labelEl.textContent = 'Reiniciar partida';
+        resetRow.noteEl.textContent = 'Se borra el Pokémon, la Pokédex y todo lo demás.';
       }, 3000);
       return;
     }
     clearTimeout(armTimeout);
     _deps.resetGame();
   });
-  viewRoot.appendChild(btn);
+  danger.box.appendChild(resetRow);
+  viewRoot.appendChild(danger);
 }
 
 function renderInfo() {

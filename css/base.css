@@ -1352,3 +1352,99 @@ html, body {
 }
 
 .hidden { display: none !important; }
+
+/* --- ajustes ---------------------------------------------------------------
+   Fichas de cristal con filas dentro, como el resto de la interfaz: icono a la
+   izquierda, nombre y explicación en medio, y a la derecha lo que hace la fila.
+   Antes eran botones sueltos a todo lo ancho con el estado dentro del texto. */
+.settings-group {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.settings-group-title {
+  margin: 0 0 6px 4px;
+  font-size: 10px;
+  opacity: .55;
+}
+
+.settings-card {
+  background: var(--card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.settings-row + .settings-row { border-top: 1px solid rgba(20, 24, 40, .07); }
+.settings-row:active { background: rgba(20, 24, 40, .05); }
+
+.settings-row.disabled { cursor: default; opacity: .55; }
+.settings-row.disabled:active { background: transparent; }
+
+/* la misma chapa que la del Pokémon y la de los avisos, en pequeño */
+.settings-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--row-color, var(--accent));
+  background: color-mix(in srgb, var(--row-color, var(--accent)) 14%, rgba(255, 255, 255, .5));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 1px 3px rgba(20, 24, 40, .08);
+}
+
+.settings-text { flex: 1 1 0; min-width: 0; }
+.settings-row p { margin: 0; }
+.settings-label { font-size: 12px; }
+.settings-note { margin-top: 3px !important; font-size: 9.5px; line-height: 1.35; opacity: .6; }
+
+.settings-chevron { flex: 0 0 auto; font-size: 11px; opacity: .35; }
+
+/* lo que borra la partida va en rojo, y al armarse se enciende del todo */
+.settings-row.tone-danger { --row-color: #d64545; }
+.settings-row.tone-danger .settings-label { color: #d64545; }
+.settings-row.armed { background: color-mix(in srgb, #d64545 10%, transparent); }
+
+/* interruptor */
+.settings-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 42px;
+  height: 25px;
+  border-radius: 999px;
+  background: rgba(20, 24, 40, .16);
+  box-shadow: 0 1px 2px rgba(20, 24, 40, .14) inset;
+  transition: background .2s ease;
+}
+.settings-switch.on { background: var(--accent); }
+
+.settings-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(20, 24, 40, .3);
+  transition: transform .2s cubic-bezier(.3, .9, .3, 1.1);
+}
+.settings-switch.on i { transform: translateX(17px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch, .settings-switch i, .settings-row { transition: none; }
+}
