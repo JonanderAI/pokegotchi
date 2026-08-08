@@ -147,35 +147,37 @@ function sunPosition(date = new Date()) {
   };
 }
 
-// Una nube: círculos solapados sobre una base plana, que es exactamente cómo
-// están hechas las de los juegos.
-function cloudShape(cx, cy, w, color, opacity) {
+// Una nube: bolas solapadas sobre una base plana, que es exactamente cómo están
+// hechas las de los juegos. Cada una se monta con un número distinto de bolas y
+// con los tamaños repartidos a ojo, no con una plantilla fija: si todas llevan
+// las mismas cuatro bolas en los mismos sitios, se nota enseguida que es la
+// misma nube repetida.
+function cloudShape(cx, cy, w, color, opacity, rnd) {
   const g = document.createElementNS(SVG_NS, 'g');
   g.setAttribute('fill', color);
-  g.setAttribute('opacity', String(opacity));
+  g.setAttribute('opacity', opacity.toFixed(2));
 
-  const h = w * 0.42;
-  const puffs = [
-    [-0.34, 0.06, 0.30],
-    [-0.05, -0.12, 0.40],
-    [0.28, 0.02, 0.32],
-    [0.05, 0.14, 0.34],
-  ];
-  puffs.forEach(([dx, dy, r]) => {
+  const h = w * (0.34 + rnd() * 0.16);
+  const puffs = 4 + Math.floor(rnd() * 4);
+
+  for (let i = 0; i < puffs; i += 1) {
+    // repartidas a lo ancho, las de en medio más altas y más gordas
+    const t = (i + rnd() * 0.7) / puffs;          // 0 a 1 de izquierda a derecha
+    const centro = 1 - Math.abs(t - 0.5) * 2;      // 1 en el medio, 0 en las puntas
     const c = document.createElementNS(SVG_NS, 'circle');
-    c.setAttribute('cx', (cx + dx * w).toFixed(1));
-    c.setAttribute('cy', (cy + dy * h).toFixed(1));
-    c.setAttribute('r', (r * h * 1.5).toFixed(1));
+    c.setAttribute('cx', (cx + (t - 0.5) * w).toFixed(1));
+    c.setAttribute('cy', (cy - centro * h * (0.18 + rnd() * 0.22)).toFixed(1));
+    c.setAttribute('r', (h * (0.42 + centro * 0.5 + rnd() * 0.18)).toFixed(1));
     g.appendChild(c);
-  });
+  }
 
   // la base recta, que es lo que las hace nube y no un montón de bolas
   const base = document.createElementNS(SVG_NS, 'rect');
   base.setAttribute('x', (cx - w / 2).toFixed(1));
-  base.setAttribute('y', (cy + h * 0.05).toFixed(1));
+  base.setAttribute('y', cy.toFixed(1));
   base.setAttribute('width', w.toFixed(1));
-  base.setAttribute('height', (h * 0.42).toFixed(1));
-  base.setAttribute('rx', (h * 0.2).toFixed(1));
+  base.setAttribute('height', (h * 0.5).toFixed(1));
+  base.setAttribute('rx', (h * 0.22).toFixed(1));
   g.appendChild(base);
 
   return g;
@@ -277,34 +279,56 @@ export function buildSky(proj, palette = skyPaletteFor(), now = new Date()) {
   disc.setAttribute('fill', palette.sun);
   svg.appendChild(disc);
 
-  // Nubes: tres filas, las de arriba más grandes y las de abajo más pequeñas y
-  // apretadas, que es lo que da sensación de que el cielo también tiene fondo.
+  // Nubes por todo el cielo, sueltas y no en filas.
+  //
+  // Van en cuatro capas de profundidad, pero las alturas se solapan de sobra y
+  // dentro de su tramo cada nube cae donde le toca, así que no se leen como
+  // líneas. Las de arriba son las cercanas: más grandes, más opacas y más
+  // rápidas; las de junto al horizonte, pequeñas, lavadas y lentas.
+  //
+  // Cada capa se dibuja cuatro veces seguidas, de -1 a +2 anchos de pantalla: la
+  // cámara se puede ir a la izquierda del encuadre y allí también tiene que
+  // haber cielo. El bucle desplaza exactamente un ancho, así que al terminar la
+  // vuelta el dibujo coincide consigo mismo y no se ve la costura.
   const clouds = document.createElementNS(SVG_NS, 'g');
   clouds.setAttribute('class', 'sky-clouds');
-  const rows = [
-    { y: 0.16, w: 0.42, n: 2, o: 0.95, dur: 190 },
-    { y: 0.40, w: 0.30, n: 3, o: 0.85, dur: 260 },
-    { y: 0.64, w: 0.20, n: 3, o: 0.7, dur: 330 },
-  ];
+
   let seed = 4242;
   const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
 
-  rows.forEach((row) => {
-    // Cada fila es una banda que se repite: se dibuja dos veces seguidas y se
-    // desplaza el conjunto, así el bucle no tiene costura.
+  const LAYERS = 4;
+  const PASSES = [-1, 0, 1, 2];
+
+  for (let l = 0; l < LAYERS; l += 1) {
+    const cerca = 1 - l / (LAYERS - 1);            // 1 la de delante, 0 la del fondo
     const band = document.createElementNS(SVG_NS, 'g');
     band.setAttribute('class', 'sky-cloud-row');
-    band.style.setProperty('--drift', `${row.dur}s`);
+    // las cercanas cruzan antes; las del fondo casi ni se mueven
+    band.style.setProperty('--drift', `${Math.round(150 + (1 - cerca) * 320)}s`);
+    band.style.setProperty('--shift', `${W}px`);
 
-    for (let pass = 0; pass < 2; pass += 1) {
-      for (let i = 0; i < row.n; i += 1) {
-        const cx = ((i + rnd() * 0.6) / row.n) * W + pass * W;
-        const cy = row.y * horizon;
-        band.appendChild(cloudShape(cx, cy, row.w * W, palette.cloud, row.o));
+    // tramo de altura de esta capa, con solape generoso entre capas
+    const desde = horizon * (0.03 + l * 0.20);
+    const hasta = horizon * (0.22 + l * 0.20);
+
+    // cuántas caben en un ancho de pantalla: al azar, pero pocas
+    const cuantas = 2 + Math.floor(rnd() * 3);
+    const semilla = seed;
+
+    PASSES.forEach((pass) => {
+      seed = semilla;                              // el mismo cielo en cada pasada
+      for (let i = 0; i < cuantas; i += 1) {
+        const w = W * (0.08 + cerca * 0.14) * (0.7 + rnd() * 0.6);
+        const cx = rnd() * W + pass * W;
+        // sin bajar de aquí: por debajo se meterían en el suelo
+        const cy = Math.min(desde + rnd() * (hasta - desde), horizon * 0.82);
+        const op = (0.3 + cerca * 0.42) * (0.75 + rnd() * 0.3);
+        band.appendChild(cloudShape(cx, cy, w, palette.cloud, Math.min(1, op), rnd));
       }
-    }
+    });
+
     clouds.appendChild(band);
-  });
+  }
   svg.appendChild(clouds);
 
   return svg;
@@ -363,7 +387,7 @@ export function buildFloor(proj) {
   haze.setAttribute('x', String(-proj.width));
   haze.setAttribute('y', far.y.toFixed(1));
   haze.setAttribute('width', String(proj.width * 3));
-  haze.setAttribute('height', (proj.height * 0.09).toFixed(1));
+  haze.setAttribute('height', (proj.height * 0.05).toFixed(1));
   svg.appendChild(haze);
 
   return svg;

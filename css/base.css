@@ -599,10 +599,10 @@ html, body {
 /* El suelo va de más claro arriba (lejos, junto al horizonte) a más oscuro
    abajo (cerca), que es como se comporta un suelo de verdad: lo lejano se lava
    con la luz del aire. Sutil, sin escalones. */
-.world-floor .floor-far { stop-color: #a8cf93; }
-.world-floor .floor-near { stop-color: #78ab61; }
-.pet-stage.night .world-floor .floor-far { stop-color: #55697c; }
-.pet-stage.night .world-floor .floor-near { stop-color: #384f4c; }
+.world-floor .floor-far { stop-color: #bcdda6; }
+.world-floor .floor-near { stop-color: #5e9048; }
+.pet-stage.night .world-floor .floor-far { stop-color: #63788c; }
+.pet-stage.night .world-floor .floor-near { stop-color: #2c4140; }
 
 /* La hierba se apaga de noche igual que todo lo demás. */
 .floor-grass { image-rendering: pixelated; }
@@ -657,11 +657,15 @@ html, body {
   background: linear-gradient(180deg, rgba(38, 50, 96, .3) 0%, rgba(28, 38, 78, .17) 100%);
 }
 /* difumina el borde del fondo contra el cielo */
-/* El color lo pone la capa del cielo según la hora, así que la junta funde con
-   el cielo que haya en ese momento y no con un gris fijo. */
-.world-floor .haze-top { stop-color: var(--horizon-color, #cfe4c6); stop-opacity: .85; }
+/* La junta entre cielo y suelo. El color lo pone la capa del cielo según la
+   hora, así que funde con el cielo que haya en ese momento y no con un gris
+   fijo. Ahora es una banda más corta y menos densa: antes se comía el arranque
+   del suelo y el horizonte se perdía; lo que se busca es rematar la línea, no
+   taparla. */
+.world-floor .haze-top { stop-color: var(--horizon-color, #cfe4c6); stop-opacity: .7; }
 .world-floor .haze-bottom { stop-color: var(--horizon-color, #cfe4c6); stop-opacity: 0; }
 .floor-haze { fill: url(#floor-haze-grad); }
+
 .world-floor .floor-haze {
   fill: url(#floor-haze-grad);
   pointer-events: none;
@@ -1844,9 +1848,12 @@ html, body {
 
 /* Las nubes cruzan el cielo despacio. Cada fila lleva dos copias seguidas y se
    desplaza el ancho de una, así que el bucle no tiene costura. */
+/* Se desplaza exactamente un ancho de pantalla, que es cada cuánto se repite el
+   dibujo. Con un 50% del contenido no cuadraba: el ancho del grupo depende de
+   dónde hayan caído las nubes. */
 @keyframes cloud-drift {
   from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+  to   { transform: translateX(calc(var(--shift, 100%) * -1)); }
 }
 .sky-cloud-row { animation: cloud-drift var(--drift, 240s) linear infinite; }
 
