@@ -171,6 +171,7 @@ function applyTimeAway() {
     const crecio = events.some((ev) => ev.type === 'stage_advance');
     showBanner('Bienvenido de vuelta', {
       icon: 'fa-clock',
+      keepDesc: true, // aquí lo que cuenta está en la descripción
       desc: `Han pasado ${describeAway(ticks)} desde tu última visita${crecio ? ' y ha crecido' : ''}.`,
     });
   }

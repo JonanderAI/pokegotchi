@@ -333,11 +333,13 @@ export function showBanner(message, opts = {}) {
     bannerTimeout = null;
   }
   if (!message) {
-    bannerEl.classList.add('hidden');
+    hideBanner();
     return;
   }
 
   const tone = BANNER_TONES[opts.tone] ? opts.tone : 'info';
+  // className limpio: se lleva por delante 'hidden' y el 'out' de un aviso que
+  // se estuviera yendo, que si no se comería al que entra
   bannerEl.className = `banner-tone-${tone}`;
   bannerEl.innerHTML = '';
 
@@ -354,7 +356,12 @@ export function showBanner(message, opts = {}) {
   title.className = 'banner-title';
   title.textContent = message;
   text.appendChild(title);
-  if (opts.desc) {
+
+  // La descripción solo sale cuando hay algo que hacer (o cuando el aviso se
+  // queda puesto): en los de paso, el titular ya lo dice todo y dos líneas más
+  // tapan media pantalla para nada.
+  const withDesc = opts.sticky || opts.actionLabel || opts.keepDesc;
+  if (opts.desc && withDesc) {
     const desc = document.createElement('p');
     desc.className = 'banner-desc';
     desc.textContent = opts.desc;
@@ -367,7 +374,7 @@ export function showBanner(message, opts = {}) {
     btn.textContent = opts.actionLabel;
     btn.addEventListener('click', () => {
       if (opts.onAction) opts.onAction();
-      bannerEl.classList.add('hidden');
+      hideBanner();
     });
     bannerEl.appendChild(btn);
   }
@@ -378,8 +385,24 @@ export function showBanner(message, opts = {}) {
   bannerEl.classList.add('in');
 
   if (!opts.sticky) {
-    bannerTimeout = setTimeout(() => bannerEl.classList.add('hidden'), opts.autoHideMs || 3500);
+    bannerTimeout = setTimeout(hideBanner, opts.autoHideMs || 3500);
   }
+}
+
+// Se va hacia arriba en vez de desaparecer de golpe. El 'hidden' se pone al
+// acabar la animación, y solo si no ha entrado otro aviso por el camino.
+function hideBanner() {
+  if (bannerTimeout) {
+    clearTimeout(bannerTimeout);
+    bannerTimeout = null;
+  }
+  if (bannerEl.classList.contains('hidden')) return;
+
+  bannerEl.classList.remove('in');
+  bannerEl.classList.add('out');
+  setTimeout(() => {
+    if (bannerEl.classList.contains('out')) bannerEl.classList.add('hidden');
+  }, 260);
 }
 
 function renderInfoCard(state) {
@@ -690,6 +713,7 @@ function cancelFeeding() {
   if (!feeding) return;
   clearTimeout(feeding.timer);
   if (feeding.berryEl) feeding.berryEl.remove();
+  if (feeding.shadowEl) feeding.shadowEl.remove();
   if (feeding.stageEl) {
     feeding.stageEl.classList.remove('placing-food');
     feeding.stageEl.removeEventListener('pointerdown', onStagePlace);
@@ -738,8 +762,15 @@ function armBerry(berry) {
   el.alt = 'Baya';
   cameraEl.appendChild(el);
 
+  // La sombra va aparte del sprite porque tiene que quedarse en el suelo
+  // mientras la baya bota: son dos cosas distintas moviéndose a la vez.
+  const shadowEl = document.createElement('div');
+  shadowEl.className = 'berry-shadow hidden';
+  cameraEl.appendChild(shadowEl);
+
   feeding = {
     berryEl: el,
+    shadowEl,
     berry,
     stageEl: petStageEl,
     phase: 'aiming',
@@ -777,6 +808,7 @@ function placeBerry(x, y) {
   const limits = petULimits(feeding.pos.v);
   feeding.pos.u = Math.min(limits.max, Math.max(limits.min, u));
   placeProp(feeding.berryEl, projection, feeding.pos, propSize);
+  placeGroundShadow(feeding.shadowEl, feeding.pos);
 }
 
 // La baya cae desde arriba y bota un par de veces antes de quedarse quieta.
@@ -786,6 +818,29 @@ function throwBerry() {
   const scale = el.style.getPropertyValue('--depth-scale') || 1;
   const fall = `scale(${scale})`;
   el.classList.remove('hidden');
+
+  // La sombra sigue los mismos tiempos que el bote: se abre y se aclara cuando
+  // la baya sube, y se cierra y se oscurece cuando toca suelo. Es lo que hace
+  // que se lea la altura.
+  const sh = feeding.shadowEl;
+  sh.classList.remove('hidden');
+  const ground = { opacity: .38, transform: 'translate(-50%, -50%) scale(1)' };
+  const air = (k) => ({
+    opacity: .38 - .3 * k,
+    transform: `translate(-50%, -50%) scale(${(1 - .55 * k).toFixed(2)})`,
+  });
+  sh.animate(
+    [
+      { ...air(1), offset: 0 },
+      { ...air(.95), offset: 0.05 },
+      { ...ground, offset: 0.55 },
+      { ...air(.55), offset: 0.72 },
+      { ...ground, offset: 0.85 },
+      { ...air(.2), offset: 0.93 },
+      { ...ground, offset: 1 },
+    ],
+    { duration: 750, easing: 'linear', fill: 'forwards' },
+  );
   el.animate(
     [
       { transform: `translateY(-260px) ${fall}`, opacity: 0, offset: 0 },
@@ -853,9 +908,11 @@ function startEating() {
 
 function finishEating() {
   const el = feeding.berryEl;
+  const sh = feeding.shadowEl;
   const berry = feeding.berry;
   feeding = null;
   if (el) el.remove();
+  if (sh) sh.remove();
   if (petImgEl) petImgEl.classList.remove('eating');
 
   const especial = !!(berry && berry.gift);
