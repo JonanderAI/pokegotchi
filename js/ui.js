@@ -1536,14 +1536,20 @@ function updateCamera() {
   const zoom = manual ? camManual.zoom : cameraZoom();
 
   // Tope: lo que se puede desplazar sin que asome el borde de lo que hay pintado.
-  // Siguiéndole solo se desplaza lo que se puede sin destapar el borde de lo
-  // pintado. A mano se deja mucho más suelto: el terreno y el cielo se dibujan
-  // tres veces más anchos que la ventana, así que hay sitio de sobra para
-  // asomarse, y quedarse encerrado en un palmo no tenía ninguna gracia.
-  const maxX = Math.max(0, ((zoom - 1) / 2) * w);
-  const maxY = Math.max(0, ((zoom - 1) / 2) * h);
-  const roamX = w * 0.9;
-  const roamY = h * 0.6;
+  // Hasta dónde se puede mover sin que asome el borde de lo pintado.
+  //
+  // El mundo (cielo, suelo y la costura del horizonte) se dibuja tres veces la
+  // ventana, centrado en ella: va de -w a 2w y de -h a 2h. Con la capa escalada
+  // desde su centro, el borde izquierdo de lo pintado cae en pantalla en
+  // w/2 - 1.5·w·zoom + tx, y para que no se vea tiene que quedar en cero o menos.
+  // De ahí sale el tope. Ojo: depende del zoom, y alejando se hace más pequeño,
+  // que es lo contrario de lo que uno diría.
+  const roamX = Math.max(0, 1.5 * w * zoom - w / 2);
+  const roamY = Math.max(0, 1.5 * h * zoom - h / 2);
+
+  // Siguiéndole se mueve menos: lo justo para encuadrarle sin despegarse.
+  const maxX = Math.min(roamX, Math.max(0, ((zoom - 1) / 2) * w));
+  const maxY = Math.min(roamY, Math.max(0, ((zoom - 1) / 2) * h));
 
   let tx;
   let ty;

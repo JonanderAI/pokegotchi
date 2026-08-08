@@ -596,10 +596,13 @@ html, body {
 /* El suelo va de casi blanco en el horizonte a un verde apagado en primer plano.
    Antes los dos extremos eran casi el mismo color, así que el degradado no se
    notaba y la superficie parecía plana. */
-.world-floor .floor-far { stop-color: #b9d8a4; }
-.world-floor .floor-near { stop-color: #7fb468; }
-.pet-stage.night .world-floor .floor-far { stop-color: #5b6e7e; }
-.pet-stage.night .world-floor .floor-near { stop-color: #3f5a52; }
+/* El suelo va de más claro arriba (lejos, junto al horizonte) a más oscuro
+   abajo (cerca), que es como se comporta un suelo de verdad: lo lejano se lava
+   con la luz del aire. Sutil, sin escalones. */
+.world-floor .floor-far { stop-color: #a8cf93; }
+.world-floor .floor-near { stop-color: #78ab61; }
+.pet-stage.night .world-floor .floor-far { stop-color: #55697c; }
+.pet-stage.night .world-floor .floor-near { stop-color: #384f4c; }
 
 /* La hierba se apaga de noche igual que todo lo demás. */
 .floor-grass { image-rendering: pixelated; }
