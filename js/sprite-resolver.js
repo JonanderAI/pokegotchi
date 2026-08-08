@@ -62,4 +62,5 @@ export const ITEM_ICONS = {
   day: `${BASE}/chrome/chrome/time-of-day/daytime.png`,
   night: `${BASE}/chrome/chrome/time-of-day/night.png`,
   leftovers: `${BASE}/items/items/leftovers.png`,
+  stone: `${BASE}/items/items/common-stone.png`,
 };

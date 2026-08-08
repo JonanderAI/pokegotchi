@@ -1448,3 +1448,22 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .settings-switch, .settings-switch i, .settings-row { transition: none; }
 }
+
+/* Minijuego de esquivar: las piedras caen más rápido y se ven algo más grandes
+   que las bayas, para que se lean como una amenaza y no como algo que coger. */
+.berry-item.rock { filter: saturate(.75) brightness(.92); }
+
+/* El golpe: se sacude de lado y parpadea en rojo un momento. */
+@keyframes pet-hurt {
+  0%   { transform: scaleX(var(--flip, 1)) translateX(0); filter: none; }
+  20%  { transform: scaleX(var(--flip, 1)) translateX(-5px); filter: sepia(1) saturate(6) hue-rotate(-40deg); }
+  45%  { transform: scaleX(var(--flip, 1)) translateX(5px); filter: none; }
+  70%  { transform: scaleX(var(--flip, 1)) translateX(-3px); filter: sepia(1) saturate(6) hue-rotate(-40deg); }
+  100% { transform: scaleX(var(--flip, 1)) translateX(0); filter: none; }
+}
+.pet-sprite-wrap .pet-img.hurt { animation: pet-hurt .45s steps(4); }
+.pet-shadow.hurt { animation: shadow-shrink .45s steps(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-sprite-wrap .pet-img.hurt, .pet-shadow.hurt { animation: none; }
+}

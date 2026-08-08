@@ -1639,6 +1639,7 @@ const BAG_ITEMS = [
   { key: 'clean', label: 'Limpiar', icon: ITEM_ICONS.hygiene },
   { key: 'medicine', label: 'Medicina', icon: ITEM_ICONS.medicine },
   { key: 'sleep', label: 'Dormir', icon: ITEM_ICONS.night },
+  { key: 'dodge', label: 'Esquivar', icon: ITEM_ICONS.stone },
 ];
 
 // El contenido de la Mochila se monta una vez; al abrirla solo se actualiza
@@ -1685,7 +1686,11 @@ function onMenuAction(key) {
   closeSheets();
   stopMinigame();
   if (key === 'play') {
-    startMinigame();
+    startMinigame('catch');
+    return;
+  }
+  if (key === 'dodge') {
+    startMinigame('dodge');
     return;
   }
   if (key === 'feed') {
@@ -1722,32 +1727,58 @@ function onMenuAction(key) {
   saveState(_state);
 }
 
-// --- minijuego: atrapar bayas ----------------------------------------------
+// --- minijuegos -------------------------------------------------------------
 //
-// Caen bayas del cielo y arrastras el dedo para que tu Pokémon corra a
-// cogerlas antes de que toquen el suelo. Se juega dentro del mundo, no en otra
-// pantalla: por eso se mueve con la misma proyección y los mismos saltitos que
-// el paseo normal, solo que más rápido.
+// Dos, y los dos se juegan dentro del mundo en vez de en otra pantalla: por eso
+// se mueven con la misma proyección y los mismos saltitos que el paseo normal,
+// solo que más rápido.
+//
+//   catch  Caen bayas y arrastras el dedo para que corra a cogerlas antes de
+//          que toquen el suelo.
+//   dodge  Caen piedras y hay que quitarse de en medio. Es el mismo motor al
+//          revés: aquí lo que cuenta es lo que NO te toca, y se acaba antes si
+//          te quedas sin vidas.
 
 const GAME_MS = 26000;
-const GAME_DROP_MS = 1300;   // cada cuánto cae una baya
-const GAME_FALL_MS = 2100;   // lo que tarda en llegar al suelo
 const GAME_STEP_MS = 150;    // el paso durante la partida, mucho más ágil
 const GAME_STEP_U = 0.045;
-const GAME_CATCH_U = 0.1;
-const GAME_GOAL = 5;         // bayas para considerar la partida un éxito
+const GAME_HIT_U = 0.1;      // lo cerca que tiene que caer para tocarle
+const DODGE_LIVES = 3;
 
-function startMinigame() {
+// Lo que cambia de un juego a otro. Lo demás (mover al Pokémon, tirar cosas,
+// mirar dónde caen) es común.
+const GAME_MODES = {
+  catch: {
+    dropMs: 1300,
+    fallMs: 2100,
+    goal: 5,
+    title: '¡A por las bayas!',
+    help: 'Arrastra el dedo para moverlo y que las atrape antes de que caigan.',
+  },
+  dodge: {
+    dropMs: 800,
+    fallMs: 1500,
+    goal: 8,
+    title: '¡Esquiva las piedras!',
+    help: 'Arrastra el dedo para apartarlo. Tres piedras encima y se acabó.',
+  },
+};
+
+function startMinigame(mode = 'catch') {
   cancelPlaydate();
   cancelFeeding();
+  stopCall();
   goHome();
   render(_state);
   if (!petStageEl) return;
 
   stopWalkTimer();
   game = {
+    mode,
+    rules: GAME_MODES[mode] || GAME_MODES.catch,
     berries: [],
     score: 0,
+    lives: DODGE_LIVES,
     targetU: petPos.u,
     endsAt: Date.now() + GAME_MS,
     dropTimer: null,
@@ -1761,9 +1792,9 @@ function startMinigame() {
 
   // El anillo del aviso hace de reloj de la partida: se vacía justo cuando se
   // acaba, así que el aviso se va solo en el momento exacto.
-  showBanner('¡A por las bayas!', {
+  showBanner(game.rules.title, {
     icon: 'fa-hand-pointer',
-    desc: 'Arrastra el dedo para moverlo y que las atrape antes de que caigan.',
+    desc: game.rules.help,
     keepDesc: true,
     asCard: true,
     autoHideMs: GAME_MS,
@@ -1797,10 +1828,9 @@ function gameStep() {
 function gameDrop() {
   if (!game) return;
 
-  const [berry] = randomBerries(1);
   const el = document.createElement('img');
-  el.className = 'berry-item falling';
-  el.src = berry.src;
+  el.className = game.mode === 'dodge' ? 'berry-item falling rock' : 'berry-item falling';
+  el.src = game.mode === 'dodge' ? ITEM_ICONS.stone : randomBerries(1)[0].src;
   el.alt = '';
   cameraEl.appendChild(el);
 
@@ -1822,7 +1852,7 @@ function gameDrop() {
       { opacity: .06, transform: 'translate(-50%, -50%) scale(.35)' },
       { opacity: .38, transform: 'translate(-50%, -50%) scale(1)' },
     ],
-    { duration: GAME_FALL_MS, easing: 'cubic-bezier(.5,0,1,.5)', fill: 'forwards' },
+    { duration: game.rules.fallMs, easing: 'cubic-bezier(.5,0,1,.5)', fill: 'forwards' },
   );
 
   const scale = el.style.getPropertyValue('--depth-scale') || 1;
@@ -1831,26 +1861,41 @@ function gameDrop() {
       { transform: `translateY(-320px) scale(${scale})` },
       { transform: `translateY(0) scale(${scale})` },
     ],
-    { duration: GAME_FALL_MS, easing: 'cubic-bezier(.5,0,1,.5)' },
+    { duration: game.rules.fallMs, easing: 'cubic-bezier(.5,0,1,.5)' },
   );
 
   const item = { el, shadow, anim, pos };
   game.berries.push(item);
   anim.onfinish = () => resolveBerry(item);
 
-  game.dropTimer = setTimeout(gameDrop, GAME_DROP_MS);
+  game.dropTimer = setTimeout(gameDrop, game.rules.dropMs);
 }
 
-// Al tocar el suelo se mira si la mascota estaba debajo.
+// Al tocar el suelo se mira si la mascota estaba debajo. Lo que eso signifique
+// depende del juego: en uno es cogerla y en el otro es llevarse el golpe.
 function resolveBerry(item) {
   if (!game) return;
   const i = game.berries.indexOf(item);
   if (i >= 0) game.berries.splice(i, 1);
 
   if (item.shadow) item.shadow.remove();
+  const encima = Math.abs(item.pos.u - petPos.u) <= GAME_HIT_U;
 
-  const cogida = Math.abs(item.pos.u - petPos.u) <= GAME_CATCH_U;
-  if (cogida) {
+  if (game.mode === 'dodge') {
+    if (encima) {
+      game.lives -= 1;
+      item.el.remove();
+      shakePet();
+      if (game.lives <= 0) endMinigame();
+    } else {
+      game.score += 1;
+      item.el.classList.add('missed');
+      setTimeout(() => item.el.remove(), 400);
+    }
+    return;
+  }
+
+  if (encima) {
     game.score += 1;
     _deps.care.catchBerry(_state);
     spawnHeart();
@@ -1863,19 +1908,41 @@ function resolveBerry(item) {
   }
 }
 
+// El golpe: se sacude y parpadea, para que se note que le ha dado.
+function shakePet() {
+  [petImgEl, petShadowEl].forEach((el) => {
+    if (!el) return;
+    el.classList.remove('hurt');
+    void el.offsetWidth;
+    el.classList.add('hurt');
+  });
+}
+
 function endMinigame() {
   if (!game) return;
-  const { score } = game;
+  const { score, mode, rules, lives } = game;
   stopMinigame();
 
-  const exito = score >= GAME_GOAL;
+  // En el de esquivar no basta con puntuar: si te quedas sin vidas, se perdió.
+  const exito = mode === 'dodge' ? lives > 0 && score >= rules.goal : score >= rules.goal;
   _deps.care.applyPlayResult(_state, exito);
-  showBanner(exito ? '¡Lo habéis pasado en grande!' : 'Se acabó el tiempo', {
-    tone: exito ? 'good' : 'info',
-    icon: 'fa-trophy',
-    desc: exito ? `${score} bayas atrapadas: ha sido una partidaza.`
-      : `${score} bayas... la próxima vez seguro que caen más.`,
-  });
+
+  if (mode === 'dodge') {
+    showBanner(lives > 0 ? '¡Ni un rasguño!' : 'Le han dado', {
+      tone: exito ? 'good' : 'info',
+      icon: 'fa-shield-halved',
+      desc: lives > 0
+        ? `${score} piedras esquivadas y le quedaban ${lives} vidas.`
+        : `Aguantó ${score} piedras antes de quedarse sin vidas.`,
+    });
+  } else {
+    showBanner(exito ? '¡Lo habéis pasado en grande!' : 'Se acabó el tiempo', {
+      tone: exito ? 'good' : 'info',
+      icon: 'fa-trophy',
+      desc: exito ? `${score} bayas atrapadas: ha sido una partidaza.`
+        : `${score} bayas... la próxima vez seguro que caen más.`,
+    });
+  }
   render(_state);
   _deps.saveState(_state);
   scheduleWalk();
